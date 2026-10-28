@@ -16,7 +16,7 @@ dist:
 
 # Publicar instaladores no GitHub Releases via terminal (requer gh autenticado)
 release: dist
-	gh release create v0.1.0 dist/* --title "Lenvix v0.1.0" --generate-notes || gh release upload v0.1.0 dist/* --clobber
+	gh release create v0.1.0 dist/*.AppImage dist/*.deb dist/*.rpm dist/*.pkg.tar.zst dist/*.tar.gz --title "Lenvix v0.1.0" --generate-notes || gh release upload v0.1.0 dist/*.AppImage dist/*.deb dist/*.rpm dist/*.pkg.tar.zst dist/*.tar.gz --clobber
 
 lint:
 	cargo clippy --all-targets
