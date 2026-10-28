@@ -1,0 +1,23 @@
+{
+  "name": "lenvix",
+  "version": "0.1.0",
+  "description": "DSLR & mirrorless live preview, controls and virtual webcam for Linux",
+  "scripts": {
+    "dev": "cargo run --release",
+    "build": "cargo build --release",
+    "dist": "./build.sh",
+    "pack": "./build.sh",
+    "lint": "cargo clippy --all-targets",
+    "check": "cargo check",
+    "test": "cargo test"
+  },
+  "keywords": [
+    "dslr",
+    "webcam",
+    "linux",
+    "v4l2loopback",
+    "gphoto2"
+  ],
+  "author": "Lucas Tiago",
+  "license": "GPL-3.0"
+}
