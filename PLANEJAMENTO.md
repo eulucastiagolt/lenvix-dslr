@@ -315,6 +315,13 @@ segundo plano (daemon + tray) mesmo com a janela fechada.
 **Fase 5 (opcional) — extras Entangle**
 - Histograma, gestão de cor ICC, perfis de configuração salvos, plugins.
 
+**Fase 6 — Suporte Multiplataforma: Windows (Última Fase)**
+- Abstração do backend de webcam virtual: DirectShow Filter / Media Foundation Virtual Camera (driver OBS VirtualCam ou AkVirtualCamera) via `#[cfg(target_os = "windows")]`.
+- Abstração de System Tray: migração de `ksni` (D-Bus/Linux) para abstração agnóstica (`tray-icon` Win32).
+- Backend de câmera: suporte a WinUSB/libusb ou Canon EDSDK.
+- Empacotamento e distribuição Windows: instalador executável (`.exe` via Inno Setup/NSIS) e versão portátil (`.zip`).
+- CI/CD no GitHub Actions com runner `windows-latest`.
+
 ---
 
 ## 6. Riscos e limitações conhecidas (observados, não especulados)
@@ -576,3 +583,25 @@ Implementado (novo `core/config.rs` + extensões em `core/camera.rs` e `gui/app.
      do device e mantém a webcam viva** (zoom/pan preservados) + WARN no log +
      status na GUI; troca de saída recomendada com webcam desligada.
    - crop_x/crop_y pares (alinhamento de pares YUYV).
+
+
+---
+
+## 11. Especificação da Fase 6 — Porte Multiplataforma para Windows (Última Fase)
+
+O Lenvix nasceu como uma aplicação Linux-first centrada em `v4l2loopback` e chamadas diretas de kernel `ioctl`. Para expandir o produto para o ecossistema Windows sem comprometer a estabilidade do Linux, a **Fase 6** fecha o ciclo de desenvolvimento do projeto com os seguintes pilares:
+
+### 11.1 Abstração do Core Stream (Webcam Virtual)
+- **Linux:** mantido pipeline nativo `v4l2loopback` em `/dev/videoN` com `exclusive_caps=1`.
+- **Windows:** implementação de `LoopbackWriter` para Windows usando interface de memória compartilhada / DirectShow Filter (compatível com o driver OBS VirtualCam / AkVirtualCamera) ou driver Media Foundation Virtual Camera.
+
+### 11.2 Abstração da Bandeja do Sistema (Tray)
+- Migração da camada `tray.rs` de `ksni` (D-Bus) para uma camada agnóstica como `tray-icon`, que interage diretamente com a Win32 API (`Shell_NotifyIcon`) no Windows e StatusNotifierItem/AppIndicator no Linux.
+
+### 11.3 Comunicação com a Câmera
+- Suporte no Windows via driver WinUSB / libusb para `libgphoto2`, ou integração com Canon EDSDK / Sony Camera Remote SDK.
+
+### 11.4 Empacotamento e Entrega Windows
+- **Instalador:** Script Inno Setup ou NSIS gerando `Lenvix-Setup-vX.Y.Z.exe` com associação de ícones e inicialização opcional com o Windows.
+- **Portátil:** Pacote `Lenvix-vX.Y.Z-windows-x86_64.zip` contendo o binário estático e assets para execução sem instalação.
+- **CI/CD:** Job de build com runner `windows-latest` no `.github/workflows/release.yml` para publicação automática de assets Windows no GitHub Releases.
