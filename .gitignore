@@ -2,7 +2,14 @@
 /dist
 packaging/arch/pkg
 packaging/arch/src
+packaging/arch/*.pkg.tar*
+*.pkg.tar*
+*.deb
+*.rpm
+*.AppImage
+*.tar.gz
 **/*.rs.bk
 *.log
 .DS_Store
+
 

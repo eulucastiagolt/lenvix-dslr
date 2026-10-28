@@ -1,4 +1,4 @@
-.PHONY: all build dev dist clean lint test check
+.PHONY: all build dev dist release clean lint test check
 
 all: build
 
@@ -13,6 +13,10 @@ dev:
 # Gerar todos os instaladores (AppImage, deb, rpm, pacman, tarball)
 dist:
 	./build.sh
+
+# Publicar instaladores no GitHub Releases via terminal (requer gh autenticado)
+release: dist
+	gh release create v0.1.0 dist/* --title "Lenvix v0.1.0" --generate-notes || gh release upload v0.1.0 dist/* --clobber
 
 lint:
 	cargo clippy --all-targets
