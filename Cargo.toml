@@ -1,0 +1,19 @@
+[package]
+name = "lenvix"
+version = "0.1.0"
+edition = "2024"
+description = "DSLR/mirrorless live preview + camera controls + virtual webcam (Linux)"
+default-run = "lenvix"
+
+[dependencies]
+gphoto2 = "3.4.1"
+gtk4 = { version = "0.11.5", features = ["v4_12"] }
+zune-jpeg = "0.5"
+crossbeam-channel = "0.5.17"
+ksni = { version = "0.3.7", features = ["blocking"] }
+
+[profile.release]
+lto = "thin"
+strip = true
+
+

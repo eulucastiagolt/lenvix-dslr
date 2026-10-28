@@ -1,0 +1,14 @@
+# atalhos estilo "npm run ..." — use com `cargo <alias>`
+[alias]
+# cargo dev → roda o app (release)
+dev = "run --release"
+# cargo watchdev → rebuild + restart automático ao salvar source
+watchdev = ["watch", "-x", "run --release"]
+# cargo watchcheck → só compila/valida ao salvar (sem abrir janela)
+watchcheck = ["watch", "-c", "-x", "check"]
+# cargo smoke → smoke test headless (12s câmera)
+smoke = "run --release --bin smoke --"
+# cargo smokew → smoke test da webcam (60s + v4l2-ctl)
+smokew = "run --release --bin smoke -- webcam"
+# cargo lint → clippy
+lint = "clippy --all-targets"
