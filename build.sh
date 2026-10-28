@@ -17,7 +17,12 @@ echo "==> 4. Gerando pacote Arch Linux (.pkg.tar.zst)..."
 (
     cd packaging/arch
     makepkg -f
-    zstd -19 -T0 --rm lenvix-bin-*.pkg.tar -o "$ROOT/dist/lenvix-bin-0.1.0-1-x86_64.pkg.tar.zst" 2>/dev/null || true
+    if ls lenvix-bin-*.pkg.tar 1> /dev/null 2>&1; then
+        zstd -f -19 -T0 --rm lenvix-bin-*.pkg.tar -o "$ROOT/dist/lenvix-bin-0.1.0-1-x86_64.pkg.tar.zst"
+    fi
+    if ls lenvix-bin-*.pkg.tar.zst 1> /dev/null 2>&1; then
+        cp -f lenvix-bin-*.pkg.tar.zst "$ROOT/dist/"
+    fi
 )
 
 echo "==> 5. Gerando pacote portátil (.tar.gz)..."

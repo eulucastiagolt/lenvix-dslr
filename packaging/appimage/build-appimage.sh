@@ -29,9 +29,11 @@ chmod +x "$APP_DIR/AppRun"
 
 # Download appimagetool if not available locally
 if ! command -v appimagetool >/dev/null 2>&1; then
-    echo "Downloading appimagetool..."
-    curl -sLo /tmp/appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
-    chmod +x /tmp/appimagetool
+    if [ ! -f /tmp/appimagetool ]; then
+        echo "Downloading appimagetool..."
+        curl -sLo /tmp/appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+        chmod +x /tmp/appimagetool
+    fi
     TOOL="/tmp/appimagetool"
 else
     TOOL="appimagetool"
