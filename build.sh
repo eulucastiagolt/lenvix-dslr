@@ -43,6 +43,7 @@ echo "Lenvix installed successfully!"
 EOF
 chmod +x dist/lenvix-v0.1.0-linux-x86_64/install.sh
 tar -czf dist/lenvix-v0.1.0-linux-x86_64.tar.gz -C dist lenvix-v0.1.0-linux-x86_64
+rm -rf dist/lenvix-v0.1.0-linux-x86_64
 
 echo "==> 6. Gerando AppImage (.AppImage)..."
 ./packaging/appimage/build-appimage.sh
