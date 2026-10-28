@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.eulucastiagolt.lenvix</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Lenvix</name>
+  <summary>DSLR and mirrorless live preview, controls and virtual webcam for Linux</summary>
+  <description>
+    <p>
+      Lenvix is a high-performance desktop application that turns your DSLR or mirrorless
+      camera into a studio-grade virtual webcam on Linux using v4l2loopback and libgphoto2.
+    </p>
+    <p>Features include:</p>
+    <ul>
+      <li>Real-time live view streaming to /dev/videoN with exclusive capture capabilities</li>
+      <li>Automatic collision resolution and dynamic device provisioning</li>
+      <li>Comprehensive camera controls: ISO, shutter speed, aperture, white balance</li>
+      <li>Tethered session capture gallery</li>
+      <li>Widescreen 16:9 standby slate when camera is idle or disconnected</li>
+      <li>System tray integration (StatusNotifierItem) for background streaming</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.eulucastiagolt.lenvix.desktop</launchable>
+  <url type="homepage">https://github.com/eulucastiagolt/lenvix-dslr</url>
+  <url type="bugtracker">https://github.com/eulucastiagolt/lenvix-dslr/issues</url>
+  <provides>
+    <binary>lenvix</binary>
+  </provides>
+  <releases>
+    <release version="0.1.0" date="2026-10-28">
+      <description>
+        <p>Initial release with virtual webcam streaming, Entangle-style camera controls, and dynamic v4l2loopback collision avoidance.</p>
+      </description>
+    </release>
+  </releases>
+</component>

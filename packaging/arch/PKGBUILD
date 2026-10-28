@@ -1,0 +1,25 @@
+# Maintainer: Lucas Tiago <lucastiagolt>
+pkgname=lenvix-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="DSLR & mirrorless live preview, controls and virtual webcam for Linux"
+arch=('x86_64')
+url="https://github.com/eulucastiagolt/lenvix-dslr"
+license=('GPL-3.0-or-later')
+depends=('gtk4' 'libgphoto2')
+optdepends=('v4l2loopback-dkms: for virtual webcam output')
+provides=('lenvix')
+conflicts=('lenvix')
+
+package() {
+    # Binary
+    install -Dm755 "${startdir}/../../target/release/lenvix" "${pkgdir}/usr/bin/lenvix"
+    
+    # Desktop integration
+    install -Dm644 "${startdir}/../../assets/io.github.eulucastiagolt.lenvix.desktop" \
+        "${pkgdir}/usr/share/applications/io.github.eulucastiagolt.lenvix.desktop"
+    install -Dm644 "${startdir}/../../assets/io.github.eulucastiagolt.lenvix.svg" \
+        "${pkgdir}/usr/share/icons/hicolor/scalable/apps/io.github.eulucastiagolt.lenvix.svg"
+    install -Dm644 "${startdir}/../../assets/io.github.eulucastiagolt.lenvix.metainfo.xml" \
+        "${pkgdir}/usr/share/metainfo/io.github.eulucastiagolt.lenvix.metainfo.xml"
+}

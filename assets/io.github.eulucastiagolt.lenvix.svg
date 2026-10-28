@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e222b"/>
+      <stop offset="100%" stop-color="#0f1115"/>
+    </linearGradient>
+    <linearGradient id="lensOuter" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3a4150"/>
+      <stop offset="100%" stop-color="#181a20"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e03131"/>
+      <stop offset="100%" stop-color="#c92a2a"/>
+    </linearGradient>
+    <linearGradient id="glassGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22b8cf"/>
+      <stop offset="50%" stop-color="#1971c2"/>
+      <stop offset="100%" stop-color="#0c2d48"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Camera Body -->
+  <rect x="24" y="60" width="208" height="152" rx="28" fill="url(#bodyGrad)" stroke="#2b303c" stroke-width="3"/>
+
+  <!-- Top Prism / Hotshoe -->
+  <path d="M84 60 L102 36 L154 36 L172 60 Z" fill="#181a20" stroke="#2b303c" stroke-width="2"/>
+  <rect x="112" y="30" width="32" height="6" rx="2" fill="#3a4150"/>
+
+  <!-- Grip texture/accent -->
+  <rect x="36" y="80" width="16" height="112" rx="6" fill="#14171d"/>
+  <circle cx="204" cy="80" r="6" fill="url(#accentGrad)"/>
+
+  <!-- Lens Outer Rings -->
+  <circle cx="128" cy="136" r="66" fill="url(#lensOuter)" stroke="#4a5568" stroke-width="4"/>
+  <circle cx="128" cy="136" r="56" fill="#12151a"/>
+  
+  <!-- Red Ring (L-Series aesthetic) -->
+  <circle cx="128" cy="136" r="50" fill="none" stroke="url(#accentGrad)" stroke-width="3"/>
+  <circle cx="128" cy="136" r="44" fill="#181b22"/>
+
+  <!-- Lens Glass Element -->
+  <circle cx="128" cy="136" r="38" fill="url(#glassGrad)"/>
+  
+  <!-- Aperture / Video Aperture Icon -->
+  <circle cx="128" cy="136" r="16" fill="#0a192f"/>
+  <polygon points="123,128 137,136 123,144" fill="#ffffff" opacity="0.95"/>
+
+  <!-- Reflection Highlight -->
+  <path d="M102 110 A 34 34 0 0 1 146 110 A 30 30 0 0 0 110 126 Z" fill="#ffffff" opacity="0.35"/>
+</svg>

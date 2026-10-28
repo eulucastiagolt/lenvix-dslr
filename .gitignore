@@ -1,4 +1,8 @@
 /target
+/dist
+packaging/arch/pkg
+packaging/arch/src
 **/*.rs.bk
 *.log
 .DS_Store
+

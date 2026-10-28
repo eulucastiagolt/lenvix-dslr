@@ -1,0 +1,40 @@
+name: lenvix
+base: core24
+version: '0.1.0'
+summary: DSLR and mirrorless live preview, controls and virtual webcam
+description: |
+  Lenvix is a high-performance desktop application written in Rust that turns
+  your DSLR or mirrorless camera into a studio-grade virtual webcam on Linux
+  using v4l2loopback and libgphoto2.
+
+grade: stable
+confinement: classic
+
+apps:
+  lenvix:
+    command: usr/bin/lenvix
+    desktop: usr/share/applications/io.github.eulucastiagolt.lenvix.desktop
+    plugs:
+      - camera
+      - raw-usb
+      - desktop
+      - desktop-legacy
+      - x11
+      - wayland
+
+parts:
+  lenvix:
+    plugin: rust
+    source: .
+    build-packages:
+      - libgtk-4-dev
+      - libgphoto2-dev
+    stage-packages:
+      - libgtk-4-1
+      - libgphoto2-6
+      - libgphoto2-port12
+    override-build: |
+      craftctl default
+      install -Dm755 target/release/lenvix $CRAFT_PART_INSTALL/usr/bin/lenvix
+      install -Dm644 assets/io.github.eulucastiagolt.lenvix.desktop $CRAFT_PART_INSTALL/usr/share/applications/io.github.eulucastiagolt.lenvix.desktop
+      install -Dm644 assets/io.github.eulucastiagolt.lenvix.svg $CRAFT_PART_INSTALL/usr/share/icons/hicolor/scalable/apps/io.github.eulucastiagolt.lenvix.svg

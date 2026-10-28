@@ -1,0 +1,41 @@
+app-id: io.github.eulucastiagolt.lenvix
+runtime: org.gnome.Platform
+runtime-version: '46'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: lenvix
+
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=all
+  - --filesystem=/dev
+  - --filesystem=xdg-pictures:create
+  - --talk-name=org.kde.StatusNotifierWatcher
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/lenvix/cargo
+
+modules:
+  - name: libgphoto2
+    buildsystem: autotools
+    sources:
+      - type: archive
+        url: https://github.com/gphoto/libgphoto2/releases/download/v2.5.31/libgphoto2-2.5.31.tar.xz
+        sha256: d8654c8651a511394f6e1f0e42d7658c1dbba724e5be4eb0bf03e32b0ec0fd48
+
+  - name: lenvix
+    buildsystem: simple
+    build-commands:
+      - cargo --offline build --release
+      - install -Dm755 target/release/lenvix /app/bin/lenvix
+      - install -Dm644 assets/io.github.eulucastiagolt.lenvix.desktop /app/share/applications/io.github.eulucastiagolt.lenvix.desktop
+      - install -Dm644 assets/io.github.eulucastiagolt.lenvix.svg /app/share/icons/hicolor/scalable/apps/io.github.eulucastiagolt.lenvix.svg
+      - install -Dm644 assets/io.github.eulucastiagolt.lenvix.metainfo.xml /app/share/metainfo/io.github.eulucastiagolt.lenvix.metainfo.xml
+    sources:
+      - type: dir
+        path: ../..

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Lenvix
+GenericName=DSLR Virtual Webcam
+Comment=DSLR and Mirrorless live preview, controls and virtual webcam
+Exec=lenvix
+Icon=io.github.eulucastiagolt.lenvix
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;Photography;
+Keywords=camera;dslr;mirrorless;webcam;v4l2;gphoto2;obs;
+StartupNotify=true
