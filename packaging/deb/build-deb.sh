@@ -4,7 +4,8 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../.." && pwd)"
 BUILD_DIR="$ROOT/target/deb-build"
-DEB_NAME="lenvix_0.1.0_amd64.deb"
+VERSION="${LENVIX_VERSION:-0.3.0}"
+DEB_NAME="lenvix_${VERSION}_amd64.deb"
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/data/usr/bin"
@@ -19,10 +20,10 @@ install -m644 "$ROOT/assets/io.github.eulucastiagolt.lenvix.desktop" "$BUILD_DIR
 install -m644 "$ROOT/assets/io.github.eulucastiagolt.lenvix.svg" "$BUILD_DIR/data/usr/share/icons/hicolor/scalable/apps/"
 install -m644 "$ROOT/assets/io.github.eulucastiagolt.lenvix.metainfo.xml" "$BUILD_DIR/data/usr/share/metainfo/"
 
-# Create control file
-cat << 'EOF' > "$BUILD_DIR/control/control"
+# Create control file (EOF sem aspas: versão vem da variável)
+cat << EOF > "$BUILD_DIR/control/control"
 Package: lenvix
-Version: 0.1.0
+Version: $VERSION
 Section: video
 Priority: optional
 Architecture: amd64

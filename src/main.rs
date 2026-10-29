@@ -10,20 +10,38 @@ use crossbeam_channel::unbounded;
 use gtk4::{gio::ApplicationFlags, prelude::*};
 
 fn main() {
-    // Intercepta comando administrativo CLI para criação de dispositivo loopback
     let args: Vec<String> = std::env::args().collect();
-    if args.len() >= 2 && args[1] == "--add-loopback" {
-        let nr: i32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(-1);
-        let label = args.get(3).map(|s| s.as_str()).unwrap_or("Lenvix Camera");
-        match lenvix::core::stream::add_loopback_root_action(nr, label) {
-            Ok(created) => {
-                println!("{created}");
+
+    // Comandos CLI (--status, --help, --version, --add-loopback)
+    if args.len() >= 2 {
+        match args[1].as_str() {
+            "--add-loopback" => {
+                let nr: i32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(-1);
+                let label = args.get(3).map(|s| s.as_str()).unwrap_or("Lenvix Camera");
+                match lenvix::core::stream::add_loopback_root_action(nr, label) {
+                    Ok(created) => {
+                        println!("{created}");
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!("{e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            "--status" => {
+                print_status();
                 std::process::exit(0);
             }
-            Err(e) => {
-                eprintln!("{e}");
-                std::process::exit(1);
+            "-v" | "--version" => {
+                println!("Lenvix {}", env!("CARGO_PKG_VERSION"));
+                std::process::exit(0);
             }
+            "-h" | "--help" => {
+                print_help();
+                std::process::exit(0);
+            }
+            _ => {}
         }
     }
 
@@ -47,4 +65,84 @@ fn main() {
     });
 
     let _ = app.run();
+}
+
+fn print_help() {
+    println!("Lenvix — DSLR & Mirrorless Live View & Virtual Webcam");
+    println!();
+    println!("Uso: lenvix [OPÇÕES]");
+    println!();
+    println!("Opções:");
+    println!("  --status          Exibe relatório de diagnóstico do sistema e sai");
+    println!("  -v, --version     Exibe versão do aplicativo e sai");
+    println!("  -h, --help        Exibe esta mensagem de ajuda e sai");
+    println!("  --add-loopback N  (Interno) Provisiona dispositivo /dev/videoN");
+}
+
+fn print_status() {
+    println!("=== Lenvix v{} — Relatório de Status ===", env!("CARGO_PKG_VERSION"));
+    println!();
+
+    // 1. Configurações
+    let s = lenvix::core::settings::load();
+    let cfg_path = lenvix::core::settings::path();
+    println!("[Configurações]");
+    println!("  Arquivo: {}", cfg_path.display());
+    println!("  FPS alvo: {}", s.fps);
+    println!("  Webcam virtual ativa: {}", s.webcam);
+    println!("  Dispositivo padrão: /dev/video{}", s.video_device);
+    println!("  Espelhamento ativo: {}", s.mirror);
+    println!(
+        "  Resolução alvo: {}",
+        s.out
+            .map(|(w, h)| format!("{w}x{h}"))
+            .unwrap_or_else(|| "Nativa".into())
+    );
+    println!("  Auto-conectar USB: {}", s.autoconnect);
+    println!();
+
+    // 2. Dispositivos v4l2loopback
+    println!("[Webcam Virtual / v4l2loopback]");
+    let devs = lenvix::core::stream::list_loopback_devices_detailed();
+    if devs.is_empty() {
+        println!("  Nenhum dispositivo /dev/videoN encontrado.");
+    } else {
+        for d in devs {
+            let in_use = if d.in_use { "ocupado" } else { "livre" };
+            println!("  /dev/video{} — \"{}\" ({in_use})", d.nr, d.card);
+        }
+    }
+    println!();
+
+    // 3. Câmeras USB
+    println!("[Câmeras USB / libgphoto2]");
+    match gphoto2::Context::new() {
+        Ok(ctx) => match ctx.list_cameras().wait() {
+            Ok(list) => {
+                let cameras: Vec<_> = list.collect();
+                if cameras.is_empty() {
+                    println!("  Nenhuma câmera detectada.");
+                } else {
+                    for d in cameras {
+                        println!("  • {} [{}]", d.model, d.port);
+                    }
+                }
+            }
+            Err(e) => println!("  Erro ao listar câmeras: {e}"),
+        },
+        Err(e) => println!("  Falha ao inicializar libgphoto2: {e}"),
+    }
+    println!();
+
+    // 4. Sessão
+    let session = lenvix::core::camera::session_dir();
+    println!("[Sessão e Armazenamento]");
+    println!("  Diretório: {}", session.display());
+    if let Ok(rd) = std::fs::read_dir(&session) {
+        let count = rd.filter_map(|e| e.ok()).count();
+        println!("  Arquivos salvos: {count}");
+    } else {
+        println!("  Arquivos salvos: 0 (diretório não criado ainda)");
+    }
+    println!();
 }

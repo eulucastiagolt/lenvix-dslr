@@ -3,6 +3,7 @@ set -e
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../.." && pwd)"
+VERSION="${LENVIX_VERSION:-0.3.0}"
 APP_DIR="$ROOT/target/AppDir"
 
 rm -rf "$APP_DIR"
@@ -40,6 +41,6 @@ else
 fi
 
 mkdir -p "$ROOT/dist"
-ARCH=x86_64 "$TOOL" --appimage-extract-and-run "$APP_DIR" "$ROOT/dist/Lenvix-0.1.0-x86_64.AppImage" || \
-ARCH=x86_64 "$TOOL" "$APP_DIR" "$ROOT/dist/Lenvix-0.1.0-x86_64.AppImage"
+ARCH=x86_64 "$TOOL" --appimage-extract-and-run "$APP_DIR" "$ROOT/dist/Lenvix-$VERSION-x86_64.AppImage" || \
+ARCH=x86_64 "$TOOL" "$APP_DIR" "$ROOT/dist/Lenvix-$VERSION-x86_64.AppImage"
 echo "AppImage created in $ROOT/dist/!"

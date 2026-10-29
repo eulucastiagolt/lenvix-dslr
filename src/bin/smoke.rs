@@ -86,7 +86,11 @@ fn main() {
                     eprintln!("FATAL: {e}");
                     std::process::exit(1);
                 }
-                EngineEv::DevicesList { .. } | EngineEv::LiveViewStatus(_) => {}
+                EngineEv::DevicesList { .. }
+                | EngineEv::LiveViewStatus(_)
+                | EngineEv::RecordingStarted { .. }
+                | EngineEv::RecordingProgress { .. }
+                | EngineEv::RecordingDone { .. } => {}
             }
         }
     }

@@ -14,7 +14,7 @@ cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.svg" "$BUILD_DIR/SOURCES/"
 cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.metainfo.xml" "$BUILD_DIR/SOURCES/"
 cp "$DIR/lenvix.spec" "$BUILD_DIR/SPECS/"
 
-rpmbuild --define "_topdir $BUILD_DIR" -bb "$BUILD_DIR/SPECS/lenvix.spec"
+rpmbuild --define "_topdir $BUILD_DIR" --define "lenvix_version ${LENVIX_VERSION:-0.3.0}" -bb "$BUILD_DIR/SPECS/lenvix.spec"
 
 mkdir -p "$ROOT/dist"
 cp "$BUILD_DIR"/RPMS/*/*.rpm "$ROOT/dist/"

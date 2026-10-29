@@ -308,9 +308,11 @@ segundo plano (daemon + tray) mesmo com a janela fechada.
 - Painel dinâmico da CameraWidget tree (fiel ao Entangle); foco; captura de imagem +
   download e sessão; galeria básica.
 
-**Fase 4 — Vídeo e refinamentos (2–3 semanas)**
-- Estratégia de gravação (a)/(b); autostart; notificações; `--status`-report completo;
-  tradução; empacotamento (PKGBUILD/Flatpak).
+**Fase 4 — Vídeo e refinamentos (Executada na v0.2.0)**
+- Estratégia de gravação (b) em MP4 (H.264 ultrafast) com timer dinâmico, fallback local e galeria integrada;
+- Notificações de desktop nativas (D-Bus/notify-send) para foto capturada e vídeo gravado;
+- Diagnóstico CLI `--status` detalhado (configurações, devices loopback, câmeras e sessão);
+- Flags adicionais `--help` e `--version`.
 
 **Fase 5 (opcional) — extras Entangle**
 - Histograma, gestão de cor ICC, perfis de configuração salvos, plugins.
@@ -584,6 +586,19 @@ Implementado (novo `core/config.rs` + extensões em `core/camera.rs` e `gui/app.
      status na GUI; troca de saída recomendada com webcam desligada.
    - crop_x/crop_y pares (alinhamento de pares YUYV).
 
+### 10.5 Fase 4 — Vídeo, Notificações e Diagnósticos CLI (Executada na v0.2.0 / Correção v0.2.1)
+
+1. **Gravação de Vídeo Local (FR-17b)**:
+   - Módulo [`core/recorder.rs`]: Gravação contínua do stream de vídeo processado em `.mp4` (H.264 ultrafast via FFmpeg com `-movflags +faststart`) com fallback para arquivo bruto se o FFmpeg não estiver instalado.
+   - Botão **"Gravar vídeo"** / **"⏹ Parar (MM:SS)"** no painel da GUI com estilo de gravação e contador de tempo decorrido.
+   - Suporte a reprodução imediata com `xdg-open` e miniaturas identificadas com ícone de vídeo na galeria da sessão.
+2. **Notificações do Sistema Operacional**:
+   - Módulo [`core/notify.rs`]: Emissão assíncrona não bloqueante de notificações desktop via `notify-send` (D-Bus) para fotos capturadas e gravações de vídeo concluídas (com nome e tamanho do arquivo).
+3. **Diagnóstico e Relatório CLI `--status` (FR-34)**:
+   - Adicionada flag `--status` ao binário executável reportando: configurações persistidas, dispositivos `/dev/videoN` do `v4l2loopback` com status de ocupação, câmeras USB detectadas pela `libgphoto2` e resumo de arquivos da sessão.
+   - Suporte a `--help` / `-h` e `--version` / `-v`.
+4. **Correção de Estabilidade de Layout (v0.2.1)**:
+   - Travamento de dimensões horizontais e quebra de texto/elipsização com `max_width_chars` e `WrapMode::WordChar` nos rótulos de status e nos painéis laterais de controle e configurações, eliminando expansões involuntárias e preservando o espaço do preview.
 
 ---
 

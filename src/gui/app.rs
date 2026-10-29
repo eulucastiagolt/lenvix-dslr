@@ -6,6 +6,7 @@
 
 use crate::core::camera::{self, CameraEngine, EngineCmd, EngineEv};
 use crate::core::config::{CfgKind, CfgNode, CfgValue};
+use crate::core::settings;
 use crossbeam_channel::{Receiver, Sender};
 use gtk4::prelude::*;
 #[allow(deprecated)]
@@ -13,6 +14,23 @@ use gtk4::{gdk, glib, Align, ButtonsType, MessageDialog};
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 pub const APP_ID: &str = "br.lenvix";
+
+/// Catálogo de controles da câmera selecionáveis na tela de configurações.
+/// (chave persistida, rótulo, aliases de nome/label dos widgets do gphoto2).
+/// Apenas os marcados são exibidos no painel "Configurações" (ordem = ordem da UI).
+pub const CONTROLS_CATALOG: &[(&str, &str, &[&str])] = &[
+    ("iso", "ISO", &["iso", "isospeed", "isospeedrate"]),
+    ("shutterspeed", "Velocidade (obturador)", &["shutterspeed", "shutterspeed2", "shutter"]),
+    ("aperture", "Abertura", &["aperture", "f-number"]),
+    ("whitebalance", "Balanço de branco", &["whitebalance"]),
+    ("exposurecompensation", "Compensação de exposição", &["exposurecompensation", "exposurecomp"]),
+    ("focusmode", "Modo de foco", &["focusmode", "focusmode2"]),
+    ("imageformat", "Formato de imagem", &["imageformat", "imagequality", "imagesize"]),
+    ("flashmode", "Modo de flash", &["flashmode", "flashmode2", "flash"]),
+    ("meteringmode", "Fotometria", &["meteringmode", "exposuremeteringmode", "aemode"]),
+    ("exposureprogrammode", "Modo de programa (P/A/S/M)", &["exposureprogrammode", "autoexposuremode"]),
+    ("capturetarget", "Destino de captura", &["capturetarget", "capturedestination"]),
+];
 
 /// Ações que vêm da tray (thread separada) e precisam rodar na thread GTK
 #[derive(Debug)]
@@ -39,8 +57,14 @@ struct Widgets {
     btn_connect: gtk4::Button,
     sw_autostart: gtk4::Switch,
     btn_capture: gtk4::Button,
+    btn_record: gtk4::Button,
     #[allow(deprecated)]
     cam_combo: gtk4::ComboBoxText,
+    #[allow(deprecated)]
+    audio_combo: gtk4::ComboBoxText,
+    #[allow(deprecated)]
+    vfmt_combo: gtk4::ComboBoxText,
+    lbl_scan_status: gtk4::Label,
     btn_liveview: gtk4::Button,
     #[allow(deprecated)]
     dev_combo: gtk4::ComboBoxText,
@@ -48,6 +72,7 @@ struct Widgets {
     gal_box: gtk4::Box,
     config_box: gtk4::Box,
     config_scroll: gtk4::ScrolledWindow,
+    window: gtk4::ApplicationWindow,
 }
 
 pub fn activate(
@@ -83,11 +108,46 @@ pub fn activate(
         .valign(Align::Start)
         .build();
 
-    let lbl_model = gtk4::Label::builder().label("carregando…").halign(Align::Start).build();
-    let lbl_status = gtk4::Label::builder().label("iniciando…").halign(Align::Start).wrap(true).build();
-    let lbl_webctr = gtk4::Label::builder().label("webcam: iniciando…").halign(Align::Start).build();
+    let header = gtk4::HeaderBar::new();
+    header.set_show_title_buttons(true);
+    let title_lbl = gtk4::Label::builder()
+        .label("<b>Lenvix</b>")
+        .use_markup(true)
+        .build();
+    header.set_title_widget(Some(&title_lbl));
+
+    let btn_settings = gtk4::Button::builder()
+        .icon_name("emblem-system-symbolic")
+        .tooltip_text("Configurações do aplicativo")
+        .build();
+    header.pack_end(&btn_settings);
+    window.set_titlebar(Some(&header));
+
+    let lbl_model = gtk4::Label::builder()
+        .label("câmera não conectada")
+        .halign(Align::Start)
+        .ellipsize(gtk4::pango::EllipsizeMode::End)
+        .build();
+    let lbl_status = gtk4::Label::builder()
+        .label("iniciando…")
+        .halign(Align::Start)
+        .wrap(true)
+        .wrap_mode(gtk4::pango::WrapMode::WordChar)
+        .max_width_chars(32)
+        .xalign(0.0)
+        .build();
+    let lbl_webctr = gtk4::Label::builder()
+        .label("webcam: iniciando…")
+        .halign(Align::Start)
+        .ellipsize(gtk4::pango::EllipsizeMode::End)
+        .max_width_chars(32)
+        .xalign(0.0)
+        .build();
 
     let left_frame = gtk4::Frame::new(None);
+    left_frame.set_size_request(320, -1);
+    left_frame.set_hexpand(false);
+    left.set_size_request(320, -1);
     left.set_margin_top(8);
     left.set_margin_bottom(8);
     left.set_margin_start(8);
@@ -101,12 +161,218 @@ pub fn activate(
         .halign(Align::Start)
         .build();
 
+    let btn_settings_cam = gtk4::Button::builder()
+        .icon_name("emblem-system-symbolic")
+        .tooltip_text("Configurações e seleção de câmera")
+        .build();
+
+    let cam_box = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .spacing(6)
+        .build();
+    lbl_model.set_hexpand(true);
+    cam_box.append(&lbl_model);
+    cam_box.append(&btn_settings_cam);
+
     #[allow(deprecated)]
     let cam_combo = gtk4::ComboBoxText::new();
     #[allow(deprecated)]
     cam_combo.append_text("Nenhuma câmera detectada");
     #[allow(deprecated)]
     cam_combo.set_active(Some(0));
+
+    // --- Janela de Configurações ---
+    let settings_win = gtk4::Window::builder()
+        .title("Configurações — Lenvix")
+        .transient_for(&window)
+        .modal(true)
+        .default_width(540)
+        .default_height(620)
+        .resizable(true)
+        .build();
+
+    let set_box = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Vertical)
+        .spacing(12)
+        .margin_top(16)
+        .margin_bottom(16)
+        .margin_start(16)
+        .margin_end(16)
+        .build();
+
+    let set_sec_cam = gtk4::Label::builder()
+        .label("<b>Seleção de Câmera</b>")
+        .use_markup(true)
+        .halign(Align::Start)
+        .build();
+
+    let set_cam_desc = gtk4::Label::builder()
+        .label("Escolha qual câmera DSLR ou mirrorless conectada via USB deve ser utilizada:")
+        .halign(Align::Start)
+        .wrap(true)
+        .css_classes(["dim-label"])
+        .build();
+
+    let btn_refresh_cams = gtk4::Button::builder()
+        .icon_name("view-refresh-symbolic")
+        .tooltip_text("Buscar câmeras conectadas agora")
+        .build();
+
+    let cam_row = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .spacing(6)
+        .build();
+    cam_combo.set_hexpand(true);
+    cam_row.append(&cam_combo);
+    cam_row.append(&btn_refresh_cams);
+
+    let lbl_scan_status = gtk4::Label::builder()
+        .label("Abra esta tela para detectar câmeras conectadas.")
+        .halign(Align::Start)
+        .wrap(true)
+        .css_classes(["dim-label"])
+        .build();
+
+    let set_sep1 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
+
+    // --- Seção Gravação (Áudio e Formato) ---
+    let set_sec_rec = gtk4::Label::builder()
+        .label("<b>Gravação de Vídeo &amp; Áudio</b>")
+        .use_markup(true)
+        .halign(Align::Start)
+        .build();
+
+    let set_rec_desc = gtk4::Label::builder()
+        .label("Configure o microfone/dispositivo de áudio e o formato de arquivo para gravações:")
+        .halign(Align::Start)
+        .wrap(true)
+        .css_classes(["dim-label"])
+        .build();
+
+    #[allow(deprecated)]
+    let audio_combo = gtk4::ComboBoxText::new();
+    #[allow(deprecated)]
+    audio_combo.append_text("Padrão do Sistema (default)");
+    #[allow(deprecated)]
+    audio_combo.append_text("Sem áudio (mudo)");
+    #[allow(deprecated)]
+    audio_combo.set_active(Some(0));
+
+    let audio_row = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .spacing(8)
+        .build();
+    let lbl_audio = gtk4::Label::builder()
+        .label("Entrada de áudio:")
+        .halign(Align::Start)
+        .build();
+    audio_combo.set_hexpand(true);
+    audio_row.append(&lbl_audio);
+    audio_row.append(&audio_combo);
+
+    #[allow(deprecated)]
+    let vfmt_combo = gtk4::ComboBoxText::new();
+    #[allow(deprecated)]
+    vfmt_combo.append_text("MP4 (.mp4 — H.264 + AAC)");
+    #[allow(deprecated)]
+    vfmt_combo.append_text("MKV (.mkv — H.264 + AAC)");
+    #[allow(deprecated)]
+    vfmt_combo.append_text("WebM (.webm — VP9 + Opus)");
+    #[allow(deprecated)]
+    vfmt_combo.append_text("MOV (.mov — QuickTime)");
+    #[allow(deprecated)]
+    vfmt_combo.append_text("AVI (.avi — MPEG4 + MP3)");
+    #[allow(deprecated)]
+    vfmt_combo.set_active(Some(0));
+
+    let vfmt_row = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .spacing(8)
+        .build();
+    let lbl_vfmt = gtk4::Label::builder()
+        .label("Formato do vídeo:")
+        .halign(Align::Start)
+        .build();
+    vfmt_combo.set_hexpand(true);
+    vfmt_row.append(&lbl_vfmt);
+    vfmt_row.append(&vfmt_combo);
+
+    let set_sep2 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
+
+    // --- Seção: Controles da câmera exibidos no painel ---
+    let set_sec_ctrl = gtk4::Label::builder()
+        .label("<b>Controles da Câmera</b>")
+        .use_markup(true)
+        .halign(Align::Start)
+        .build();
+
+    let set_ctrl_desc = gtk4::Label::builder()
+        .label("Marque os controles que devem aparecer no painel “Configurações”. Itens não marcados ficam ocultos (spam de controles não usados). Os mais usados já vêm marcados por padrão:")
+        .halign(Align::Start)
+        .wrap(true)
+        .css_classes(["dim-label"])
+        .build();
+
+    let ctrl_grid = gtk4::Grid::builder()
+        .column_spacing(14)
+        .row_spacing(6)
+        .halign(Align::Start)
+        .margin_start(8)
+        .build();
+
+    // estado compartilhado: chaves de controles visíveis (settings.conf | GUI)
+    let visible_state: Rc<RefCell<Vec<String>>> =
+        Rc::new(RefCell::new(crate::core::settings::load().visible_controls));
+    // última árvore de configuração recebida da câmera — usada para listar na
+    // tela de configurações TODOS os controles que ela realmente expõe
+    let last_tree: Rc<RefCell<Vec<CfgNode>>> = Rc::new(RefCell::new(Vec::new()));
+    // checkboxes de controles visíveis (recriados a cada abertura das configs)
+    let ctrl_checks: Rc<RefCell<Vec<(String, gtk4::CheckButton)>>> =
+        Rc::new(RefCell::new(Vec::new()));
+    let ctrl_syncing: Rc<std::cell::Cell<bool>> = Rc::new(std::cell::Cell::new(false));
+
+    let set_sep3 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
+
+    let set_sec_app = gtk4::Label::builder()
+        .label("<b>Aplicativo</b>")
+        .use_markup(true)
+        .halign(Align::Start)
+        .build();
+
+    let lbl_ver = gtk4::Label::builder()
+        .label(format!("Lenvix v{}", env!("CARGO_PKG_VERSION")))
+        .halign(Align::Start)
+        .css_classes(["dim-label"])
+        .build();
+
+    let btn_close_settings = gtk4::Button::builder()
+        .label("Fechar")
+        .halign(Align::End)
+        .build();
+
+    set_box.append(&set_sec_cam);
+    set_box.append(&set_cam_desc);
+    set_box.append(&cam_row);
+    set_box.append(&lbl_scan_status);
+    set_box.append(&set_sep1);
+    set_box.append(&set_sec_rec);
+    set_box.append(&set_rec_desc);
+    set_box.append(&audio_row);
+    set_box.append(&vfmt_row);
+    set_box.append(&set_sep2);
+    set_box.append(&set_sec_ctrl);
+    set_box.append(&set_ctrl_desc);
+    set_box.append(&ctrl_grid);
+    set_box.append(&set_sep3);
+    set_box.append(&set_sec_app);
+    set_box.append(&lbl_ver);
+    set_box.append(&btn_close_settings);
+
+    let set_scroll = gtk4::ScrolledWindow::new();
+    set_scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
+    let set_scroll_child = set_box.clone();
+    set_scroll.set_child(Some(&set_scroll_child));
+    settings_win.set_child(Some(&set_scroll));
 
     let btn_connect = gtk4::Button::with_label("Conectar câmera");
     let btn_liveview = gtk4::Button::with_label("Live View");
@@ -120,9 +386,21 @@ pub fn activate(
     btn_cam_row.append(&btn_connect);
     btn_cam_row.append(&btn_liveview);
 
-    let btn_capture = gtk4::Button::with_label("Capturar (full-res)");
+    let btn_capture = gtk4::Button::with_label("Foto (full-res)");
     btn_capture.set_tooltip_text(Some("captura no cartão e baixa para a sessão local"));
     btn_capture.set_sensitive(false);
+
+    let btn_record = gtk4::Button::with_label("Gravar vídeo");
+    btn_record.set_tooltip_text(Some("Gravar stream de vídeo ao vivo (MP4/H.264)"));
+    btn_record.set_sensitive(false);
+
+    let btn_cap_row = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .spacing(6)
+        .homogeneous(true)
+        .build();
+    btn_cap_row.append(&btn_capture);
+    btn_cap_row.append(&btn_record);
 
     let sw_autostart = gtk4::Switch::builder()
         .halign(Align::End)
@@ -218,9 +496,11 @@ pub fn activate(
         .halign(Align::End)
         .valign(Align::Center)
         .hexpand(false)
+        .tooltip_text("Espelha horizontalmente apenas o vídeo da câmera (não afeta a imagem de standby)")
         .build();
     let lbl_mirror_row = gtk4::Label::builder()
-        .label("Espelhar imagem")
+        .label("Espelhar vídeo da câmera")
+        .tooltip_text("Espelha horizontalmente apenas o vídeo da câmera (não afeta a imagem de standby)")
         .halign(Align::Start)
         .hexpand(true)
         .build();
@@ -256,9 +536,9 @@ pub fn activate(
 
     // Monta o painel esquerdo
     left.append(&sec_cam_lbl);
-    left.append(&cam_combo);
+    left.append(&cam_box);
     left.append(&btn_cam_row);
-    left.append(&btn_capture);
+    left.append(&btn_cap_row);
     left.append(&auto_row);
     left.append(&lbl_status);
 
@@ -359,10 +639,22 @@ pub fn activate(
         }
     });
 
-    // captura
+    // captura de foto
     let cmd_tx = engine.borrow().cmd_tx.clone();
     btn_capture.connect_clicked(move |_| {
         let _ = cmd_tx.send(EngineCmd::Capture);
+    });
+
+    // gravação de vídeo
+    let is_recording = Rc::new(std::cell::Cell::new(false));
+    let is_recording_btn = is_recording.clone();
+    let cmd_tx_rec = engine.borrow().cmd_tx.clone();
+    btn_record.connect_clicked(move |_| {
+        if is_recording_btn.get() {
+            let _ = cmd_tx_rec.send(EngineCmd::StopRecording);
+        } else {
+            let _ = cmd_tx_rec.send(EngineCmd::StartRecording);
+        }
     });
 
     // espelhar
@@ -382,6 +674,104 @@ pub fn activate(
     let live_on_btn = live_on.clone();
     btn_liveview.connect_clicked(move |_| {
         let _ = cmd_tx.send(EngineCmd::SetLiveView(!live_on_btn.get()));
+    });
+
+    // abertura e controle da janela de configurações
+    let audio_sources_data = Rc::new(RefCell::new(Vec::<String>::new()));
+    let audio_sources_combo = audio_sources_data.clone();
+    let audio_combo_setup = audio_combo.clone();
+
+    let open_settings = {
+        let settings_win = settings_win.clone();
+        let cmd_tx = engine.borrow().cmd_tx.clone();
+        let lbl_scan_status = lbl_scan_status.clone();
+        let suppress = suppress.clone();
+        let ctrl_grid_open = ctrl_grid.clone();
+        let ctrl_checks_open = ctrl_checks.clone();
+        let ctrl_syncing_open = ctrl_syncing.clone();
+        let visible_state_sync = visible_state.clone();
+        let last_tree_sync = last_tree.clone();
+        let cam_on_checks = cam_on.clone();
+        Rc::new(move || {
+            lbl_scan_status.set_text("Buscando câmeras…");
+            let _ = cmd_tx.send(EngineCmd::SetScanning(true));
+            let _ = cmd_tx.send(EngineCmd::ScanCameras);
+
+            // reconstrói os checkboxes: catálogo curado + todos os controles
+            // que a câmera reproduz na última árvore lida
+            let tree = last_tree_sync.borrow().clone();
+            rebuild_ctrl_checks(
+                &ctrl_grid_open,
+                &ctrl_checks_open,
+                &ctrl_syncing_open,
+                &visible_state_sync,
+                &tree,
+                &cmd_tx,
+                &cam_on_checks,
+            );
+
+            // Atualiza lista de dispositivos de áudio
+            #[allow(deprecated)]
+            let current_active = audio_combo_setup.active();
+            let sources = crate::core::audio::list_audio_sources();
+            suppress.set(true);
+            #[allow(deprecated)]
+            audio_combo_setup.remove_all();
+            #[allow(deprecated)]
+            audio_combo_setup.append_text("Padrão do Sistema (default)");
+            let mut ids = vec!["default".to_string()];
+            for src in &sources {
+                #[allow(deprecated)]
+                audio_combo_setup.append_text(&src.description);
+                ids.push(src.id.clone());
+            }
+            #[allow(deprecated)]
+            audio_combo_setup.append_text("Sem áudio (mudo)");
+            ids.push("none".to_string());
+            *audio_sources_combo.borrow_mut() = ids;
+
+            #[allow(deprecated)]
+            if let Some(act) = current_active {
+                audio_combo_setup.set_active(Some(act));
+            } else {
+                audio_combo_setup.set_active(Some(0));
+            }
+            suppress.set(false);
+
+            settings_win.present();
+        })
+    };
+
+    let open_settings_hdr = open_settings.clone();
+    btn_settings.connect_clicked(move |_| {
+        open_settings_hdr();
+    });
+
+    let open_settings_cam = open_settings.clone();
+    btn_settings_cam.connect_clicked(move |_| {
+        open_settings_cam();
+    });
+
+    let cmd_tx_ref = engine.borrow().cmd_tx.clone();
+    let lbl_scan_status_ref = lbl_scan_status.clone();
+    btn_refresh_cams.connect_clicked(move |_| {
+        lbl_scan_status_ref.set_text("Atualizando lista de câmeras…");
+        let _ = cmd_tx_ref.send(EngineCmd::ScanCameras);
+    });
+
+    let settings_win_cls = settings_win.clone();
+    let cmd_tx_cls = engine.borrow().cmd_tx.clone();
+    btn_close_settings.connect_clicked(move |_| {
+        let _ = cmd_tx_cls.send(EngineCmd::SetScanning(false));
+        settings_win_cls.set_visible(false);
+    });
+
+    let settings_win_req = settings_win.clone();
+    let cmd_tx_req = engine.borrow().cmd_tx.clone();
+    settings_win.connect_close_request(move |_| {
+        let _ = cmd_tx_req.send(EngineCmd::SetScanning(false));
+        settings_win_req.set_visible(false);
+        glib::Propagation::Stop
     });
 
     // seleção de câmera (cam_combo)
@@ -408,6 +798,40 @@ pub fn activate(
             let _ = cmd_tx.send(EngineCmd::CreateNewVideoDevice);
         });
     }
+
+    // seleção de fonte de áudio
+    let cmd_tx_audio = engine.borrow().cmd_tx.clone();
+    let suppress_audio = suppress.clone();
+    let audio_sources_listener = audio_sources_data.clone();
+    #[allow(deprecated)]
+    audio_combo.connect_changed(move |cb| {
+        if suppress_audio.get() {
+            return;
+        }
+        if let Some(ix) = cb.active()
+            && let Some(src_id) = audio_sources_listener.borrow().get(ix as usize)
+        {
+            let _ = cmd_tx_audio.send(EngineCmd::SetAudioSource(src_id.clone()));
+        }
+    });
+
+    // seleção de formato de vídeo
+    let cmd_tx_vfmt = engine.borrow().cmd_tx.clone();
+    let suppress_vfmt = suppress.clone();
+    #[allow(deprecated)]
+    vfmt_combo.connect_changed(move |cb| {
+        if suppress_vfmt.get() {
+            return;
+        }
+        let fmt = match cb.active() {
+            Some(1) => "mkv",
+            Some(2) => "webm",
+            Some(3) => "mov",
+            Some(4) => "avi",
+            _ => "mp4",
+        };
+        let _ = cmd_tx_vfmt.send(EngineCmd::SetVideoFormat(fmt.to_string()));
+    });
 
     fn parse_video_nr(text: &str) -> Option<u32> {
         let s = text.trim();
@@ -455,8 +879,7 @@ pub fn activate(
     }
 
     // ------- painel de preview (FR-05) -------
-    let picture = gtk4::Picture::builder().content_fit(gtk4::ContentFit::ScaleDown).build();
-    let lbl_fps = gtk4::Label::builder()
+    let picture = gtk4::Picture::builder().content_fit(gtk4::ContentFit::ScaleDown).build();    let lbl_fps = gtk4::Label::builder()
         .label("fps: –")
         .halign(Align::End)
         .css_classes(["dim-label"])
@@ -465,6 +888,54 @@ pub fn activate(
     frame.set_child(Some(&picture));
     frame.set_hexpand(true);
     frame.set_vexpand(true);
+    frame.set_size_request(400, 300);
+
+    // menu de contexto do preview (clique direito): captura, live view, pasta
+    let frame_gc = gtk4::GestureClick::new();
+    frame_gc.set_button(3);
+    let cmd_tx_ctx = engine.borrow().cmd_tx.clone();
+    let live_on_ctx = live_on.clone();
+    let cam_on_ctx = cam_on.clone();
+    let frame_for_menu = frame.clone();
+    frame_gc.connect_pressed(move |g, _n, x, y| {
+        g.set_state(gtk4::EventSequenceState::Claimed);
+        let mut items: Vec<(String, Box<dyn FnOnce()>)> = Vec::new();
+        if cam_on_ctx.get() {
+            items.push((
+                "Capturar foto (full-res)".into(),
+                {
+                    let cmd_tx = cmd_tx_ctx.clone();
+                    Box::new(move || { let _ = cmd_tx.send(EngineCmd::Capture); })
+                },
+            ));
+            if live_on_ctx.get() {
+                items.push((
+                    "Parar Live View".into(),
+                    {
+                        let cmd_tx = cmd_tx_ctx.clone();
+                        Box::new(move || { let _ = cmd_tx.send(EngineCmd::SetLiveView(false)); })
+                    },
+                ));
+            } else {
+                items.push((
+                    "Iniciar Live View".into(),
+                    {
+                        let cmd_tx = cmd_tx_ctx.clone();
+                        Box::new(move || { let _ = cmd_tx.send(EngineCmd::SetLiveView(true)); })
+                    },
+                ));
+            }
+        }
+        items.push((
+            "Abrir pasta da sessão".into(),
+            Box::new(move || {
+                let dir = camera::session_dir();
+                let _ = std::process::Command::new("xdg-open").arg(&dir).spawn();
+            }),
+        ));
+        show_context_menu(frame_for_menu.upcast_ref(), x, y, items);
+    });
+    frame.add_controller(frame_gc);
 
     // ------- painel dinâmico de configurações (esquerda) -------
     let config_box = gtk4::Box::builder()
@@ -478,7 +949,8 @@ pub fn activate(
     config_scroll.set_vexpand(true);
     let right_frame = gtk4::Frame::new(Some("Configurações"));
     right_frame.set_child(Some(&config_scroll));
-    right_frame.set_size_request(360, -1);
+    right_frame.set_size_request(340, -1);
+    right_frame.set_hexpand(false);
 
     mid.append(&right_frame);
     mid.append(&frame);
@@ -526,13 +998,18 @@ pub fn activate(
         btn_connect,
         sw_autostart,
         btn_capture,
+        btn_record,
         cam_combo,
+        audio_combo,
+        vfmt_combo,
+        lbl_scan_status,
         btn_liveview,
         dev_combo,
         lbl_session,
         gal_box,
         config_box,
         config_scroll,
+        window: window.clone(),
     };
 
     window.set_child(Some(&root));
@@ -557,7 +1034,7 @@ pub fn activate(
     refresh_gallery(&w);
 
     // loop de eventos (única fonte de verdade: core-camera + tray)
-    poll_events(app, &window, engine, action_rx, w, cam_on, live_on, cameras_data, suppress);
+    poll_events(app, &window, engine, action_rx, w, cam_on, live_on, is_recording, cameras_data, suppress, visible_state, last_tree);
 }
 
 // ------------ painel dinâmico de configurações -------------------------------
@@ -570,6 +1047,265 @@ fn render_config(box_: &gtk4::Box, nodes: &[CfgNode], cmd: &Sender<EngineCmd>) {
         add_node(box_, n, cmd);
     }
 }
+
+/// Normaliza um identificador: minúsculas, só alfanuméricos
+/// ("ISO Speed Rate" → "isospeedrate", "/camera/shutterspeed2" → "shutterspeed2")
+fn normalize_id(s: &str) -> String {
+    s.to_ascii_lowercase().chars().filter(|c| c.is_alphanumeric()).collect()
+}
+
+/// Filtra a árvore de configuração da câmera: apenas os controles marcados
+/// como visíveis (tela de configurações) são renderizados. Seções que ficarem
+/// vazias são removidas junto. matching por nome/label (aliases, sem acento).
+fn filter_visible_controls(nodes: &[CfgNode], visible: &[String]) -> Vec<CfgNode> {
+    nodes
+        .iter()
+        .filter_map(|n| match n.kind {
+            CfgKind::Section => {
+                let children = filter_visible_controls(&n.children, visible);
+                if children.is_empty() {
+                    None
+                } else {
+                    Some(CfgNode { children, ..n.clone() })
+                }
+            }
+            _ => leaf_visible(n, visible).then(|| n.clone()),
+        })
+        .collect()
+}
+
+/// true = o widget corresponde a um controle marcado como visível.
+/// A lista visível pode conter chaves do catálogo curado (matched por aliases
+/// de nome/label) ou chaves dinâmicas (nome normalizado do widget da câmera).
+fn leaf_visible(n: &CfgNode, visible: &[String]) -> bool {
+    if n.readonly {
+        return false; // controles só de leitura nunca aparecem (info, não controle)
+    }
+    let short = n.name.rsplit('/').next().unwrap_or(&n.name);
+    let name_n = normalize_id(short);
+    let label_n = normalize_id(&n.label);
+    // chave direta na lista visível (chaves dinâmicas da câmera)
+    if visible.iter().any(|k| {
+        let k_n = normalize_id(k);
+        k_n == name_n || (!label_n.is_empty() && k_n == label_n)
+    }) {
+        return true;
+    }
+    // aliases do catálogo curado
+    CONTROLS_CATALOG.iter().any(|(key, _, aliases)| {
+        visible.iter().any(|k| k == key)
+            && aliases
+                .iter()
+                .any(|a| normalize_id(a) == name_n || normalize_id(a) == label_n)
+    })
+}
+
+/// Coleta folhas alteráveis da árvore (chave = último segmento normalizado).
+fn collect_leaf_controls(nodes: &[CfgNode], out: &mut Vec<(String, String)>) {
+    for n in nodes {
+        if matches!(n.kind, CfgKind::Section) {
+            collect_leaf_controls(&n.children, out);
+            continue;
+        }
+        if matches!(n.kind, CfgKind::Date) || n.readonly {
+            continue;
+        }
+        let short = n.name.rsplit('/').next().unwrap_or(&n.name);
+        let key = normalize_id(short);
+        if key.is_empty() {
+            continue;
+        }
+        let label = if n.label.is_empty() { short.to_string() } else { n.label.clone() };
+        out.push((key, label));
+    }
+}
+
+/// Monta a lista de entradas dos checkboxes: catálogo curado (mais usados
+/// primeiro) + todos os demais controles que a câmera expõe na última árvore.
+/// `true` = vem do catálogo.
+fn collect_control_entries(tree: &[CfgNode]) -> Vec<(String, String, bool)> {
+    let mut entries: Vec<(String, String, bool)> = CONTROLS_CATALOG
+        .iter()
+        .map(|(k, l, _)| ((*k).to_string(), (*l).to_string(), true))
+        .collect();
+    let catalog_aliases: Vec<String> = CONTROLS_CATALOG
+        .iter()
+        .flat_map(|(_, _, a)| a.iter().map(|x| normalize_id(x)).collect::<Vec<_>>())
+        .collect();
+
+    let mut leaves: Vec<(String, String)> = Vec::new();
+    collect_leaf_controls(tree, &mut leaves);
+    for (key, label) in leaves {
+        let in_catalog = CONTROLS_CATALOG
+            .iter()
+            .any(|(k, _aliases, _)| normalize_id(k) == key || catalog_aliases.contains(&key));
+        if !in_catalog {
+            match entries.iter_mut().find(|(k, _, _)| *k == key) {
+                Some(e) => e.1 = label, // catálogo com nome real da câmera
+                None => entries.push((key, label, false)),
+            }
+        }
+    }
+    entries
+}
+
+/// Reconstrói os checkboxes de "Controles da Câmera": catálogo curado (mais
+/// usados primeiro) + todos os demais controles que a câmera realmente expõe
+/// na última árvore lida. Marca os visíveis e envia SetVisibleControls a cada
+/// toggle (com re-render do painel quando a câmera está conectada).
+#[allow(clippy::too_many_arguments)]
+fn rebuild_ctrl_checks(
+    grid: &gtk4::Grid,
+    checks: &Rc<RefCell<Vec<(String, gtk4::CheckButton)>>>,
+    syncing: &Rc<std::cell::Cell<bool>>,
+    visible_state: &Rc<RefCell<Vec<String>>>,
+    tree: &[CfgNode],
+    cmd: &Sender<EngineCmd>,
+    cam_on: &Rc<std::cell::Cell<bool>>,
+) {
+    while let Some(c) = grid.first_child() {
+        grid.remove(&c);
+    }
+
+    let entries = collect_control_entries(tree);
+
+    // cria os checkboxes (grid de 2 colunas)
+    let mut new_checks = Vec::new();
+    for (i, (key, label, from_catalog)) in entries.iter().enumerate() {
+        let tip = if *from_catalog {
+            let aliases = CONTROLS_CATALOG
+                .iter()
+                .find(|(k, _, _)| *k == key)
+                .map(|(_, _, a)| a.join(", "))
+                .unwrap_or_default();
+            format!("Aparece no painel quando a câmera expõe: {aliases}")
+        } else {
+            "Controle exposto pela câmera conectada".to_string()
+        };
+        let cb = gtk4::CheckButton::builder()
+            .label(label)
+            .tooltip_text(tip)
+            .build();
+        grid.attach(&cb, (i % 2) as i32, (i / 2) as i32, 1, 1);
+        let checks_h = checks.clone();
+        let syncing_h = syncing.clone();
+        let vs_h = visible_state.clone();
+        let cmd_h = cmd.clone();
+        let cam_h = cam_on.clone();
+        cb.connect_toggled(move |_| {
+            if syncing_h.get() {
+                return;
+            }
+            let vis: Vec<String> = checks_h
+                .borrow()
+                .iter()
+                .filter(|(_, c)| c.is_active())
+                .map(|(k, _)| k.clone())
+                .collect();
+            *vs_h.borrow_mut() = vis.clone();
+            let _ = cmd_h.send(EngineCmd::SetVisibleControls(vis));
+            if cam_h.get() {
+                let _ = cmd_h.send(EngineCmd::GetConfig);
+            }
+        });
+        new_checks.push((key.clone(), cb));
+    }
+    *checks.borrow_mut() = new_checks;
+
+    // marca os visíveis em silêncio (syncing impede eco dos handlers)
+    syncing.set(true);
+    let vis = visible_state.borrow().clone();
+    for (key, cb) in checks.borrow().iter() {
+        cb.set_active(vis.iter().any(|k| k == key));
+    }
+    syncing.set(false);
+}
+
+/// Menu de contexto (popover): itens = (rótulo, ação). Mostra em x/y relativos
+/// ao widget e se remove depois.
+fn show_context_menu(
+    widget: &gtk4::Widget,
+    x: f64,
+    y: f64,
+    items: Vec<(String, Box<dyn FnOnce()>)>,
+) {
+    let pop = gtk4::Popover::new();
+    pop.set_has_arrow(false);
+    pop.set_autohide(true);
+    let box_ = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Vertical)
+        .spacing(2)
+        .margin_top(4)
+        .margin_bottom(4)
+        .margin_start(4)
+        .margin_end(4)
+        .build();
+    for (label, act) in items {
+        let b = gtk4::Button::builder().label(label).css_classes(["flat", "context-menu-item"]).build();
+        let pop = pop.clone();
+        let act = Rc::new(RefCell::new(Some(act)));
+        b.connect_clicked(move |_| {
+            pop.popdown();
+            if let Some(a) = act.borrow_mut().take() {
+                a();
+            }
+        });
+        box_.append(&b);
+    }
+    pop.set_child(Some(&box_));
+    pop.set_pointing_to(Some(&gdk::Rectangle::new(x.round() as i32, y.round() as i32, 1, 1)));
+    pop.set_parent(widget);
+    // remove da hierarquia quando fechar — no próximo idle, para não mexer na
+    // árvore durante o processamento do unmap (unparent em unrealize recursaria)
+    let pop_idle = pop.clone();
+    pop.connect_closed(move |_| {
+        let pc = pop_idle.clone();
+        glib::idle_add_local_once(move || {
+            if pc.parent().is_some() {
+                pc.unparent();
+            }
+        });
+    });
+    pop.popup();
+}
+
+/// Diálogo de confirmação de exclusão de mídia (galeria)
+#[allow(deprecated)]
+fn confirm_delete_media(
+    parent: &gtk4::Window,
+    path: std::path::PathBuf,
+    after_delete: Box<dyn FnOnce()>,
+) {
+    let file_name = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let dlg = MessageDialog::builder()
+        .transient_for(parent)
+        .modal(true)
+        .buttons(ButtonsType::YesNo)
+        .text("Excluir mídia?")
+        .secondary_text(format!("Excluir “{file_name}” do disco permanentemente?\n\nNão é possível desfazer."))
+        .build();
+    let act = Rc::new(RefCell::new(Some(after_delete)));
+    let act_resp = act.clone();
+    dlg.connect_response(move |d, resp| {
+        if resp == gtk4::ResponseType::Yes
+            && let Some(f) = act_resp.borrow_mut().take()
+        {
+            match std::fs::remove_file(&path) {
+                Ok(()) => {
+                    crate::core::log::log("INFO", &format!("mídia excluída: {}", path.display()));
+                    f();
+                }
+                Err(e) => {
+                    crate::core::log::log("ERROR", &format!("excluir {}: {e}", path.display()));
+                    f(); // atualiza a galeria mesmo assim (estado real do disco)
+                }
+            }
+        }
+        d.destroy();
+    });
+    dlg.show();
+}
+
 
 fn row(host: &gtk4::Box, tooltip: &str, widget: &impl IsA<gtk4::Widget>) {
     if !tooltip.is_empty() {
@@ -740,18 +1476,26 @@ fn has_content(n: &CfgNode) -> bool {
 // ------------ galeria da sessão -------------------------------------
 
 fn refresh_gallery(w: &Widgets) {
-    while let Some(c) = w.gal_box.first_child() {
-        w.gal_box.remove(&c);
+    refresh_gallery_box(&w.gal_box, w.window.upcast_ref());
+}
+
+/// Galeria da sessão: thumbnails + clique abre o arquivo; clique direito abre
+/// menu de contexto (Abrir / Abrir pasta / Excluir mídia do disco).
+fn refresh_gallery_box(gal_box: &gtk4::Box, parent: &gtk4::Window) {
+    while let Some(c) = gal_box.first_child() {
+        gal_box.remove(&c);
     }
     let dir = camera::session_dir();
-    let Ok(rd) = std::fs::read_dir(&dir) else { return };
+    let Ok(rd) = std::fs::read_dir(&dir) else {
+        return;
+    };
     let mut files: Vec<(std::path::PathBuf, std::time::SystemTime)> = rd
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .filter(|p| {
             matches!(
                 p.extension().and_then(|x| x.to_str()).map(|s| s.to_ascii_lowercase()).as_deref(),
-                Some("jpg" | "jpeg" | "cr2" | "cr3" | "png")
+                Some("jpg" | "jpeg" | "cr2" | "cr3" | "png" | "mp4" | "mkv" | "avi" | "mov" | "webm")
             )
         })
         .filter_map(|p| {
@@ -760,32 +1504,88 @@ fn refresh_gallery(w: &Widgets) {
         .collect();
     files.sort_by_key(|fa| std::cmp::Reverse(fa.1));
     if files.is_empty() {
-        let l = gtk4::Label::builder().label("(sem fotos)".to_string()).build();
+        let l = gtk4::Label::builder().label("(sem fotos ou vídeos)".to_string()).build();
         l.set_sensitive(false);
-        w.gal_box.append(&l);
+        gal_box.append(&l);
     }
     for (p, _) in files.iter().take(24) {
         let btn = gtk4::Button::new();
         let img = gtk4::Image::builder().pixel_size(96).build();
         let ext = p.extension().and_then(|x| x.to_str()).map(|s| s.to_ascii_lowercase());
+        let is_video = matches!(ext.as_deref(), Some("mp4" | "mkv" | "avi" | "mov" | "webm"));
         if matches!(ext.as_deref(), Some("jpg" | "jpeg" | "png")) {
             img.set_from_file(Some(p));
+        } else if is_video {
+            img.set_icon_name(Some("video-x-generic"));
         } else {
             // RAW (CR2/CR3): GTK não decodifica — ícone genérico
             img.set_icon_name(Some("image-x-generic"));
         }
         btn.set_child(Some(&img));
         let size = p.metadata().map(|m| m.len()).unwrap_or(0);
+        let tag = if is_video { " [Vídeo]" } else { "" };
         btn.set_tooltip_text(Some(&format!(
-            "{} ({:.1} MB)",
+            "{}{} ({:.1} MB) — clique abre · clique direito exclui",
             p.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(),
+            tag,
             size as f64 / 1e6
         )));
+
+        // clique esquerdo: abrir o arquivo
         let path = p.clone();
         btn.connect_clicked(move |_| {
             let _ = std::process::Command::new("xdg-open").arg(&path).spawn();
         });
-        w.gal_box.append(&btn);
+
+        // clique direito: menu de contexto (abrir / abrir pasta / excluir)
+        let gc = gtk4::GestureClick::new();
+        gc.set_button(3); // botão direito
+        let path = p.clone();
+        let gal_box_c = gal_box.clone();
+        let parent_c = parent.clone();
+        let btn_c = btn.clone();
+        gc.connect_pressed(move |g, _n, x, y| {
+            g.set_state(gtk4::EventSequenceState::Claimed);
+            let dir_path = path.parent().map(|d| d.to_path_buf()).unwrap_or_else(camera::session_dir);
+            let items: Vec<(String, Box<dyn FnOnce()>)> = vec![
+                (
+                    "Abrir arquivo".into(),
+                    {
+                        let path = path.clone();
+                        Box::new(move || {
+                            let _ = std::process::Command::new("xdg-open").arg(&path).spawn();
+                        })
+                    },
+                ),
+                (
+                    "Abrir pasta".into(),
+                    {
+                        let dir_path = dir_path.clone();
+                        Box::new(move || {
+                            let _ = std::process::Command::new("xdg-open").arg(&dir_path).spawn();
+                        })
+                    },
+                ),
+                (
+                    "Excluir mídia…".into(),
+                    {
+                        let path = path.clone();
+                        let gal_box_c = gal_box_c.clone();
+                        let parent_c = parent_c.clone();
+                        Box::new(move || {
+                            let parent_c = parent_c.clone();
+                            let parent_dlg = parent_c.clone();
+                            confirm_delete_media(&parent_dlg, path.clone(), Box::new(move || {
+                                refresh_gallery_box(&gal_box_c, &parent_c);
+                            }));
+                        })
+                    },
+                ),
+            ];
+            show_context_menu(btn_c.upcast_ref(), x, y, items);
+        });
+        btn.add_controller(gc);
+        gal_box.append(&btn);
     }
 }
 
@@ -800,8 +1600,11 @@ fn poll_events(
     w: Widgets,
     cam_on: Rc<std::cell::Cell<bool>>,
     live_on: Rc<std::cell::Cell<bool>>,
+    is_recording: Rc<std::cell::Cell<bool>>,
     cameras_data: Rc<RefCell<Vec<(String, String)>>>,
     suppress: Rc<std::cell::Cell<bool>>,
+    visible_state: Rc<RefCell<Vec<String>>>,
+    last_tree: Rc<RefCell<Vec<CfgNode>>>,
 ) {
     let app = app.clone();
     let engine = engine.clone();
@@ -846,6 +1649,7 @@ fn poll_events(
                         w.cam_combo.append_text("Nenhuma câmera detectada");
                         #[allow(deprecated)]
                         w.cam_combo.set_active(Some(0));
+                        w.lbl_scan_status.set_text("Nenhuma câmera detectada via USB.");
                         w.btn_connect.set_sensitive(false);
                         w.lbl_model.set_text("câmera não conectada");
                         if !cam_on.get() {
@@ -866,6 +1670,7 @@ fn poll_events(
                         }
                         #[allow(deprecated)]
                         w.cam_combo.set_active(active_idx);
+                        w.lbl_scan_status.set_text(&format!("{} câmera(s) detectada(s).", cameras.len()));
                         w.btn_connect.set_sensitive(true);
                         w.lbl_model.set_text(&active.0);
                         if !cam_on.get() {
@@ -944,8 +1749,15 @@ fn poll_events(
                     w.picture.set_paintable(Some(&tex));
                     w.lbl_fps.set_text(&format!("fps: {measured_fps:.1} — {fw}×{fh}"));
                 }
-                EngineEv::AppState { fps, webcam, mirror, zoom, pan_x, pan_y, out, autoconnect, video_device: _, liveview } => {
+                EngineEv::AppState { fps, webcam, mirror, zoom, pan_x, pan_y, out, autoconnect, video_device: _, liveview, audio_source, video_format, visible_controls } => {
                     suppress.set(true);
+                    // lista salva como está: contém chaves do catálogo curado
+                    // e/ou chaves dinâmicas (nomes reais da câmera)
+                    *visible_state.borrow_mut() = if visible_controls.is_empty() {
+                        settings::default_visible_controls()
+                    } else {
+                        visible_controls
+                    };
                     w.spinner.set_value(f64::from(fps));
                     w.sw_webcam.set_active(webcam);
                     w.sw_mirror.set_active(mirror);
@@ -965,6 +1777,21 @@ fn poll_events(
                         Some((1080, 1440)) => Some(8),
                         _ => Some(0),
                     });
+                    #[allow(deprecated)]
+                    w.vfmt_combo.set_active(match video_format.to_ascii_lowercase().as_str() {
+                        "mkv" => Some(1),
+                        "webm" => Some(2),
+                        "mov" => Some(3),
+                        "avi" => Some(4),
+                        _ => Some(0),
+                    });
+                    if audio_source == "none" || audio_source == "disabled" {
+                        #[allow(deprecated)]
+                        w.audio_combo.set_active(Some(1));
+                    } else {
+                        #[allow(deprecated)]
+                        w.audio_combo.set_active(Some(0));
+                    }
                     live_on.set(liveview);
                     suppress.set(false);
                 }
@@ -973,6 +1800,7 @@ fn poll_events(
                     w.btn_connect.set_label(if on { "Desconectar câmera" } else { "Conectar câmera" });
                     w.btn_liveview.set_sensitive(on);
                     w.btn_capture.set_sensitive(on);
+                    w.btn_record.set_sensitive(on);
                     if on {
                         w.lbl_status.set_text("câmera conectada (obturador em repouso — inicie o Live View para preview)");
                     } else {
@@ -980,6 +1808,9 @@ fn poll_events(
                         w.btn_liveview.set_label("Live View");
                         w.btn_liveview.remove_css_class("destructive-action");
                         w.btn_liveview.remove_css_class("suggested-action");
+                        w.btn_record.set_label("Gravar vídeo");
+                        w.btn_record.remove_css_class("destructive-action");
+                        is_recording.set(false);
                         w.lbl_status.set_text("standby — conecte a câmera para preview");
                         w.lbl_model.set_text("câmera não conectada");
                     }
@@ -1002,13 +1833,16 @@ fn poll_events(
                         }
                     }
                 }
-                EngineEv::ConfigTree(nodes) => {
+                EngineEv::ConfigTree(nodes_raw) => {
+                    *last_tree.borrow_mut() = nodes_raw.clone();
                     let cmd = engine.borrow().cmd_tx.clone();
                     let adj = w.config_scroll.vadjustment();
                     let pos = adj.value();
                     if pos > 0.0 {
                         pending_scroll.set(Some(pos));
                     }
+                    // filtro: apenas os controles marcados na tela de configurações
+                    let nodes = filter_visible_controls(&nodes_raw, &visible_state.borrow());
                     render_config(&w.config_box, &nodes, &cmd);
                     let adj_c = adj.clone();
                     let ps_idle = pending_scroll.clone();
@@ -1031,6 +1865,34 @@ fn poll_events(
                         }
                         (None, Some(e)) => {
                             w.lbl_status.set_markup(&format!("<b>{e}</b>"));
+                        }
+                        (None, None) => {}
+                    }
+                }
+                EngineEv::RecordingStarted { path } => {
+                    is_recording.set(true);
+                    w.btn_record.set_label("⏹ Parar (00:00)");
+                    w.btn_record.add_css_class("destructive-action");
+                    w.lbl_status.set_text(&format!("gravando vídeo: {path}"));
+                }
+                EngineEv::RecordingProgress { elapsed_secs, frames: _ } => {
+                    let mins = elapsed_secs / 60;
+                    let secs = elapsed_secs % 60;
+                    w.btn_record.set_label(&format!("⏹ Parar ({mins:02}:{secs:02})"));
+                    w.lbl_status.set_text(&format!("gravando vídeo… ({mins:02}:{secs:02})"));
+                }
+                EngineEv::RecordingDone { path, duration_secs, size_bytes, error } => {
+                    is_recording.set(false);
+                    w.btn_record.set_label("Gravar vídeo");
+                    w.btn_record.remove_css_class("destructive-action");
+                    match (path, error) {
+                        (Some(p), _) => {
+                            let mb = size_bytes as f64 / 1_000_000.0;
+                            w.lbl_status.set_text(&format!("vídeo salvo ({duration_secs}s, {mb:.1} MB): {p}"));
+                            refresh_gallery(&w);
+                        }
+                        (None, Some(e)) => {
+                            w.lbl_status.set_markup(&format!("<b>erro gravação: {e}</b>"));
                         }
                         (None, None) => {}
                     }
@@ -1067,3 +1929,152 @@ fn ui_row(label: &str, w: &impl IsA<gtk4::Widget>) -> gtk4::Box {
     r.append(w.as_ref());
     r
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn leaf(name: &str, label: &str, readonly: bool) -> CfgNode {
+        CfgNode {
+            name: name.into(),
+            label: label.into(),
+            kind: CfgKind::Radio,
+            readonly,
+            info: String::new(),
+            value: Some(CfgValue::Radio { options: vec![], current: String::new() }),
+            children: vec![],
+        }
+    }
+
+    fn section(name: &str, children: Vec<CfgNode>) -> CfgNode {
+        CfgNode {
+            name: name.into(),
+            label: name.into(),
+            kind: CfgKind::Section,
+            readonly: false,
+            info: String::new(),
+            value: None,
+            children,
+        }
+    }
+
+    fn names(nodes: Vec<CfgNode>) -> Vec<String> {
+        let mut v = Vec::new();
+        for n in nodes {
+            if n.kind == CfgKind::Section {
+                v.extend(names(n.children));
+            } else {
+                v.push(n.name);
+            }
+        }
+        v
+    }
+
+    #[test]
+    fn default_keys_tempo_no_catalogo() {
+        let catalog: Vec<&str> = CONTROLS_CATALOG.iter().map(|(k, _, _)| *k).collect();
+        for k in settings::default_visible_controls() {
+            assert!(catalog.contains(&k.as_str()), "chave '{k}' ausente do catálogo");
+        }
+    }
+
+    #[test]
+    fn controla_filtro_por_nome_e_label() {
+        let vis = settings::default_visible_controls();
+        let tree = [section(
+            "camera",
+            vec![
+                leaf("/camera/iso", "ISO", false),
+                leaf("/camera/shutterspeed2", "Shutter Speed 2", false),
+                leaf("/f-number", "f-number", false),
+                leaf("/camera/whitebalance", "White Balance", false),
+                leaf("/camera/aemode", "AE mode", false),
+                leaf("/camera/utilities/autofocusdrive", "Autofocus drive", false),
+                leaf("/camera/ownername", "Owner name", true),
+            ],
+        )];
+        let filtered = filter_visible_controls(&tree, &vis);
+        let got = names(filtered);
+        assert!(got.contains(&"/camera/iso".to_string()));
+        assert!(got.contains(&"/camera/shutterspeed2".to_string()));
+        assert!(got.contains(&"/f-number".to_string()));
+        assert!(got.contains(&"/camera/whitebalance".to_string()));
+        // não marcado no default:
+        assert!(!got.contains(&"/camera/aemode".to_string()));
+        assert!(!got.contains(&"/camera/utilities/autofocusdrive".to_string()));
+        // readonly nunca aparece
+        assert!(!got.contains(&"/camera/ownername".to_string()));
+    }
+
+    #[test]
+    fn secao_vazia_e_removida() {
+        let vis = settings::default_visible_controls();
+        let tree = [
+            section("camera", vec![leaf("/camera/iso", "ISO", false)]),
+            section("actions", vec![leaf("/actions/autofocusdrive", "Autofocus drive", false)]),
+            section("info", vec![leaf("/info/model", "Camera Model", true)]),
+        ];
+        let filtered = filter_visible_controls(&tree, &vis);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].name, "camera");
+    }
+
+    #[test]
+    fn lista_vazia_esconde_tudo() {
+        let tree = [section("camera", vec![leaf("/camera/iso", "ISO", false)])];
+        let filtered = filter_visible_controls(&tree, &[]);
+        assert!(filtered.is_empty());
+    }
+
+    #[test]
+    fn chaves_dinâmicas_da_câmera_são_respeitadas() {
+        // chave não-catalogada (nome real do widget) marcada direto na lista
+        let vis = vec!["drivemode".to_string(), "reviewtime".to_string()];
+        let tree = [section(
+            "camera",
+            vec![
+                leaf("/camera/drivemode", "Drive Mode", false),
+                leaf("/camera/reviewtime", "Review Time", false),
+                leaf("/camera/beep", "Beep", false),
+            ],
+        )];
+        let got = names(filter_visible_controls(&tree, &vis));
+        assert!(got.contains(&"/camera/drivemode".to_string()));
+        assert!(got.contains(&"/camera/reviewtime".to_string()));
+        assert!(!got.contains(&"/camera/beep".to_string()));
+    }
+
+    #[test]
+    fn coleta_folhas_da_árvore_para_tela_de_config() {
+        let tree = [
+            section("camera", vec![
+                leaf("/camera/iso", "ISO", false),
+                leaf("/camera/beep", "Beep", false),
+                leaf("/info/model", "Camera Model", true),
+                leaf("/actions/autofocusdrive", "Autofocus drive", false),
+            ]),
+        ];
+        let mut out = Vec::new();
+        collect_leaf_controls(&tree, &mut out);
+        let keys: Vec<String> = out.iter().map(|(k, _)| k.clone()).collect();
+        assert_eq!(keys, vec!["iso", "beep", "autofocusdrive"]);
+    }
+
+    #[test]
+    fn rebuild_não_duplica_chaves_do_catálogo() {
+        // widget "iso" da árvore é coberto pelo catálogo — só os extras entram
+        let tree = [
+            section("camera", vec![
+                leaf("/camera/iso", "ISO", false),
+                leaf("/camera/beep", "Beep", false),
+                leaf("/camera/drivemode", "Drive Mode", false),
+            ]),
+        ];
+        let entries = collect_control_entries(&tree);
+        let cat: Vec<&str> = entries.iter().filter(|e| e.2).map(|e| e.0.as_str()).collect();
+        assert!(cat == CONTROLS_CATALOG.iter().map(|(k, _, _)| *k).collect::<Vec<_>>());
+        let extras: Vec<&str> = entries.iter().filter(|e| !e.2).map(|e| e.0.as_str()).collect();
+        assert_eq!(extras, vec!["beep", "drivemode"]);
+    }
+}
+

@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Settings {
     pub fps: u32,
     pub webcam: bool,
@@ -15,6 +15,9 @@ pub struct Settings {
     pub out: Option<(u32, u32)>,
     pub autoconnect: bool,
     pub video_device: u32,
+    pub audio_source: String,
+    pub video_format: String,
+    pub visible_controls: Vec<String>,
 }
 
 impl Default for Settings {
@@ -29,8 +32,23 @@ impl Default for Settings {
             out: Some((1920, 1080)), // 16:9 por padrão!
             autoconnect: false,
             video_device: 9,
+            audio_source: "default".into(),
+            video_format: "mp4".into(),
+            visible_controls: default_visible_controls(),
         }
     }
+}
+
+pub fn default_visible_controls() -> Vec<String> {
+    vec![
+        "iso".into(),
+        "shutterspeed".into(),
+        "aperture".into(),
+        "whitebalance".into(),
+        "focusmode".into(),
+        "exposurecompensation".into(),
+        "imageformat".into(),
+    ]
 }
 
 /// Pasta de config do app: $XDG_CONFIG_HOME/lenvix (fallback ~/.config/lenvix,
@@ -103,6 +121,25 @@ pub fn load() -> Settings {
                     s.video_device = n;
                 }
             }
+            "audio_source" => {
+                s.audio_source = v.to_string();
+            }
+            "video_format" => {
+                let fmt = v.to_ascii_lowercase();
+                if matches!(fmt.as_str(), "mp4" | "mkv" | "webm" | "mov" | "avi") {
+                    s.video_format = fmt;
+                }
+            }
+            "visible_controls" => {
+                let list: Vec<String> = v
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                if !list.is_empty() {
+                    s.visible_controls = list;
+                }
+            }
             _ => {}
         }
     }
@@ -119,7 +156,8 @@ pub fn save(s: &Settings) {
     let txt = format!(
         "# lenvix — configurações do app (gerado automaticamente)\n\
          fps={}\nwebcam={}\nmirror={}\nzoom={:.3}\npan_x={}\npan_y={}\n\
-         out_w={}\nout_h={}\nautoconnect={}\nvideo_device={}\n",
+         out_w={}\nout_h={}\nautoconnect={}\nvideo_device={}\n\
+         audio_source={}\nvideo_format={}\nvisible_controls={}\n",
         s.fps,
         s.webcam,
         s.mirror,
@@ -129,7 +167,10 @@ pub fn save(s: &Settings) {
         s.out.map_or(0, |(w, _)| w),
         s.out.map_or(0, |(_, h)| h),
         s.autoconnect,
-        s.video_device
+        s.video_device,
+        s.audio_source,
+        s.video_format,
+        s.visible_controls.join(","),
     );
     let tmp = dir.join("settings.conf.tmp");
     if let Err(e) = std::fs::write(&tmp, txt) {

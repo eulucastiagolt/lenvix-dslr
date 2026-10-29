@@ -27,6 +27,21 @@
     <binary>lenvix</binary>
   </provides>
   <releases>
+    <release version="0.3.0" date="2026-10-29">
+      <description>
+        <p>Gravação de áudio integrada, sincronização em tempo real (wallclock), formatos de vídeo múltiplos (MP4, MKV, WebM, MOV, AVI), menu de contexto na galeria com opção de excluir mídias e filtro de controles visíveis da câmera personalizável na tela de configurações.</p>
+      </description>
+    </release>
+    <release version="0.2.1" date="2026-10-29">
+      <description>
+        <p>Correções de layout: dimensões fixas nos painéis laterais impedindo redimensionamento involuntário do preview; versão de correção pós-Fase 4.</p>
+      </description>
+    </release>
+    <release version="0.2.0" date="2026-10-29">
+      <description>
+        <p>Tela dedicada de configurações, seletor de câmera desacoplado com detecção sob demanda e ajuste de espelhamento do vídeo.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-10-28">
       <description>
         <p>Initial release with virtual webcam streaming, Entangle-style camera controls, and dynamic v4l2loopback collision avoidance.</p>

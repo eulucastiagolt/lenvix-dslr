@@ -1,6 +1,6 @@
 name: lenvix
 base: core24
-version: '0.1.0'
+version: '0.3.0'
 summary: DSLR and mirrorless live preview, controls and virtual webcam
 description: |
   Lenvix is a high-performance desktop application written in Rust that turns

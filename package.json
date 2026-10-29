@@ -1,6 +1,6 @@
 {
   "name": "lenvix",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "DSLR & mirrorless live preview, controls and virtual webcam for Linux",
   "scripts": {
     "dev": "cargo run --release",

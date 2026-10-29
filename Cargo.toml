@@ -1,6 +1,6 @@
 [package]
 name = "lenvix"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2024"
 description = "DSLR/mirrorless live preview + camera controls + virtual webcam (Linux)"
 default-run = "lenvix"
