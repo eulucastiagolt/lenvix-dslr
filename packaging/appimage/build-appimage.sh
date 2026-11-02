@@ -18,7 +18,10 @@ cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.desktop" "$APP_DIR/usr/share/ap
 cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.desktop" "$APP_DIR/"
 cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.svg" "$APP_DIR/usr/share/icons/hicolor/scalable/apps/"
 cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.svg" "$APP_DIR/io.github.eulucastiagolt.lenvix.svg"
-cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.svg" "$APP_DIR/.DirIcon"
+if [ -f "$ROOT/assets/io.github.eulucastiagolt.lenvix.png" ]; then
+    cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.png" "$APP_DIR/io.github.eulucastiagolt.lenvix.png"
+    cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.png" "$APP_DIR/.DirIcon"
+fi
 cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.metainfo.xml" "$APP_DIR/usr/share/metainfo/"
 if [ -d "$ROOT/i18n" ]; then
     cp -r "$ROOT/i18n/"* "$APP_DIR/usr/share/lenvix/i18n/"
@@ -55,7 +58,6 @@ mkdir -p "$ROOT/dist"
 UPDATE_INFO="gh-releases-zsync|eulucastiagolt/lenvix-dslr|latest|Lenvix-*.x86_64.AppImage.zsync"
 APPIMG="$ROOT/dist/Lenvix-$VERSION-x86_64.AppImage"
 
-ARCH=x86_64 "$TOOL" --updateinformation "$UPDATE_INFO" --appimage-extract-and-run "$APP_DIR" "$APPIMG" || \
 ARCH=x86_64 "$TOOL" --updateinformation "$UPDATE_INFO" "$APP_DIR" "$APPIMG"
 
 # Gera o .zsync ao lado do AppImage (asset exigido pelo gh-releases-zsync).
