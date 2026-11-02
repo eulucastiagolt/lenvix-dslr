@@ -152,7 +152,7 @@ pub fn activate(
         .build();
 
     let bg_title = gtk4::Label::builder()
-        .label(format!("<b>{}</b>", tr("Virtual Background & Blur")))
+        .label(format!("<b>{}</b>", glib::markup_escape_text(&tr("Virtual Background & Blur"))))
         .use_markup(true)
         .halign(Align::Start)
         .build();
@@ -438,7 +438,7 @@ pub fn activate(
     let set_sep3 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
 
     let set_sec_app = gtk4::Label::builder()
-        .label(format!("<b>{}</b>", tr("Application & Performance")))
+        .label(format!("<b>{}</b>", glib::markup_escape_text(&tr("Application & Performance"))))
         .use_markup(true)
         .halign(Align::Start)
         .build();
