@@ -74,7 +74,8 @@ jobs:
           draft: false
           prerelease: false
           make_latest: true
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
+          generate_release_notes: false
           files: |
             dist/*.deb
             dist/*.rpm
