@@ -10,7 +10,9 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/usr/bin" \
          "$APP_DIR/usr/share/applications" \
          "$APP_DIR/usr/share/icons/hicolor/scalable/apps" \
+         "$APP_DIR/usr/share/icons/hicolor/256x256/apps" \
          "$APP_DIR/usr/share/metainfo" \
+         "$APP_DIR/usr/share/appdata" \
          "$APP_DIR/usr/share/lenvix/i18n"
 
 cp "$ROOT/target/release/lenvix" "$APP_DIR/usr/bin/"
@@ -20,9 +22,12 @@ cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.svg" "$APP_DIR/usr/share/icons/
 cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.svg" "$APP_DIR/io.github.eulucastiagolt.lenvix.svg"
 if [ -f "$ROOT/assets/io.github.eulucastiagolt.lenvix.png" ]; then
     cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.png" "$APP_DIR/io.github.eulucastiagolt.lenvix.png"
+    cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.png" "$APP_DIR/usr/share/icons/hicolor/256x256/apps/"
     cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.png" "$APP_DIR/.DirIcon"
 fi
 cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.metainfo.xml" "$APP_DIR/usr/share/metainfo/"
+cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.metainfo.xml" "$APP_DIR/usr/share/metainfo/io.github.eulucastiagolt.lenvix.appdata.xml"
+cp "$ROOT/assets/io.github.eulucastiagolt.lenvix.metainfo.xml" "$APP_DIR/usr/share/appdata/io.github.eulucastiagolt.lenvix.appdata.xml"
 if [ -d "$ROOT/i18n" ]; then
     cp -r "$ROOT/i18n/"* "$APP_DIR/usr/share/lenvix/i18n/"
 fi
