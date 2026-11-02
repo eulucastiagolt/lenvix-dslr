@@ -71,6 +71,9 @@ struct Widgets {
     #[allow(deprecated)]
     language_combo: gtk4::ComboBoxText,
     sw_auto_suspend: gtk4::Switch,
+    sw_use_gpu: gtk4::Switch,
+    sw_keep_in_background: gtk4::Switch,
+    keep_in_background_state: Rc<std::cell::Cell<bool>>,
     lbl_scan_status: gtk4::Label,
     btn_liveview: gtk4::Button,
     #[allow(deprecated)]
@@ -487,6 +490,40 @@ pub fn activate(
     suspend_row.append(&lbl_suspend);
     suspend_row.append(&sw_auto_suspend);
 
+    // Aceleração por GPU
+    let gpu_row = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .spacing(6)
+        .build();
+    let sw_use_gpu = gtk4::Switch::builder()
+        .halign(Align::End)
+        .valign(Align::Center)
+        .build();
+    let lbl_gpu = gtk4::Label::new(Some(&tr("Hardware acceleration (GPU)")));
+    lbl_gpu.set_halign(Align::Start);
+    lbl_gpu.set_hexpand(true);
+    lbl_gpu.set_tooltip_text(Some(&tr("Uses GPU for rendering and video encoding when available.")));
+    sw_use_gpu.set_tooltip_text(Some(&tr("Uses GPU for rendering and video encoding when available.")));
+    gpu_row.append(&lbl_gpu);
+    gpu_row.append(&sw_use_gpu);
+
+    // Manter em segundo plano ao fechar
+    let bg_row = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .spacing(6)
+        .build();
+    let sw_keep_in_background = gtk4::Switch::builder()
+        .halign(Align::End)
+        .valign(Align::Center)
+        .build();
+    let lbl_bg = gtk4::Label::new(Some(&tr("Keep running in background when closed")));
+    lbl_bg.set_halign(Align::Start);
+    lbl_bg.set_hexpand(true);
+    lbl_bg.set_tooltip_text(Some(&tr("When closing the window, keeps the app running in the system tray.")));
+    sw_keep_in_background.set_tooltip_text(Some(&tr("When closing the window, keeps the app running in the system tray.")));
+    bg_row.append(&lbl_bg);
+    bg_row.append(&sw_keep_in_background);
+
     let lbl_ver = gtk4::Label::builder()
         .label(format!("Lenvix v{}", env!("CARGO_PKG_VERSION")))
         .halign(Align::Start)
@@ -516,6 +553,8 @@ pub fn activate(
     set_box.append(&set_app_desc);
     set_box.append(&lang_row);
     set_box.append(&suspend_row);
+    set_box.append(&gpu_row);
+    set_box.append(&bg_row);
     set_box.append(&lbl_ver);
     set_box.append(&btn_close_settings);
 
@@ -1226,6 +1265,34 @@ pub fn activate(
         });
     }
 
+    let keep_in_background_state = Rc::new(std::cell::Cell::new(true));
+
+    {
+        let cmd_tx = engine.borrow().cmd_tx.clone();
+        let suppress_gpu = suppress.clone();
+        sw_use_gpu.connect_state_set(move |_, state| {
+            if suppress_gpu.get() {
+                return glib::Propagation::Proceed;
+            }
+            let _ = cmd_tx.send(EngineCmd::SetUseGpu(state));
+            glib::Propagation::Proceed
+        });
+    }
+
+    {
+        let cmd_tx = engine.borrow().cmd_tx.clone();
+        let keep_in_bg = keep_in_background_state.clone();
+        let suppress_bg = suppress.clone();
+        sw_keep_in_background.connect_state_set(move |_, state| {
+            if suppress_bg.get() {
+                return glib::Propagation::Proceed;
+            }
+            keep_in_bg.set(state);
+            let _ = cmd_tx.send(EngineCmd::SetKeepInBackground(state));
+            glib::Propagation::Proceed
+        });
+    }
+
     // ------- Efeitos de Fundo Virtual (Google Meet style) -------
     let selected_bg_image: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
 
@@ -1473,6 +1540,9 @@ pub fn activate(
         vfmt_combo,
         language_combo,
         sw_auto_suspend,
+        sw_use_gpu,
+        sw_keep_in_background,
+        keep_in_background_state: keep_in_background_state.clone(),
         lbl_scan_status,
         btn_liveview,
         dev_combo,
@@ -1492,12 +1562,19 @@ pub fn activate(
     window.set_child(Some(&root));
     window.present();
 
-    // FR-26: fechar a janela ≠ sair do app (continua em segundo plano na tray)
-    window.connect_close_request({
-        let window = window.clone();
-        move |_| {
-            window.set_visible(false);
+    // Fechar a janela: minimiza para a bandeja se keep_in_background == true, ou sai do app se false
+    let keep_in_bg_close = keep_in_background_state.clone();
+    let engine_close = engine.clone();
+    let app_close = app.clone();
+    let window_close = window.clone();
+    window.connect_close_request(move |_| {
+        if keep_in_bg_close.get() {
+            window_close.set_visible(false);
             glib::Propagation::Stop
+        } else {
+            engine_close.borrow_mut().shutdown();
+            app_close.quit();
+            glib::Propagation::Proceed
         }
     });
 
@@ -2251,6 +2328,8 @@ fn poll_events(
                     background_mode,
                     blur_density,
                     background_image,
+                    use_gpu,
+                    keep_in_background,
                 } => {
                     suppress.set(true);
                     // lista salva como está: contém chaves do catálogo curado
@@ -2269,6 +2348,9 @@ fn poll_events(
                     w.pany_scale.set_value(f64::from(pan_y));
                     w.sw_auto_suspend.set_active(auto_suspend_preview);
                     auto_suspend_enabled.set(auto_suspend_preview);
+                    w.sw_use_gpu.set_active(use_gpu);
+                    w.sw_keep_in_background.set_active(keep_in_background);
+                    w.keep_in_background_state.set(keep_in_background);
                     #[allow(deprecated)]
                     w.language_combo.set_active_id(Some(&language));
                     #[allow(deprecated)]

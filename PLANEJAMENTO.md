@@ -656,6 +656,20 @@ Implementado (novo `core/config.rs` + extensões em `core/camera.rs` e `gui/app.
    - Botão dedicado na barra de cabeçalho (`gtk4::MenuButton` com `gtk4::Popover`) estilo Google Meet para troca instantânea de efeitos;
    - Persistência das preferências (`background_mode`, `blur_density`, `background_image`) em `settings.conf`.
 
+### 10.8 Fase 5.6 (v0.6.0 — Beta): Aceleração por Hardware (GPU) e Controle de Execução em Segundo Plano
+1. **Aceleração por Hardware via GPU (VA-API / DRI)**:
+   - Detecção dinâmica de aceleradores gráficos (`/dev/dri/renderD128`, AMD Radeon / Intel QuickSync);
+   - Codificação de vídeo H.264 por hardware (`h264_vaapi`) durante gravações locais em MP4, MKV e outros formatos, eliminando sobrecarga na CPU;
+   - Fallback gracioso para codificação em software (`libx264 -preset ultrafast`) caso a GPU esteja desativada ou indisponível;
+   - Interruptor comutável nas configurações do aplicativo: *"Aceleração por hardware (GPU)"*.
+2. **Controle de Execução em Segundo Plano**:
+   - Interruptor nas configurações: *"Manter em segundo plano ao fechar"*;
+   - Quando ativado (padrão): o fechamento da janela minimiza o app para a bandeja do sistema (tray), mantendo o fluxo da webcam virtual ativo;
+   - Quando desativado: o fechamento da janela encerra a aplicação por completo, desligando os subprocessos, threads do engine e liberando os descritores USB e V4L2.
+3. **Correções de Robustez e Estilo**:
+   - Correção do escape de entidades Pango Markup (`&amp;`) nas seções de cabeçalho e configurações;
+   - Sincronização automática das variáveis de versão nos empacotadores (.deb, .rpm, .AppImage, PKGBUILD).
+
 ---
 
 ## 11. Especificação da Fase 6 — Porte Multiplataforma para Windows (Última Fase)

@@ -31,6 +31,7 @@ impl VideoRecorder {
         height: u32,
         audio_source: &str,
         format_ext: &str,
+        use_gpu: bool,
     ) -> Result<Self, String> {
         let _ = std::fs::create_dir_all(dest_dir);
         let now = file_timestamp();
@@ -53,11 +54,18 @@ impl VideoRecorder {
 
         if has_ffmpeg {
             let path = dest_dir.join(format!("lenvix_video_{now}.{ext}"));
+            let has_vaapi = use_gpu && Path::new("/dev/dri/renderD128").exists();
+
             let mut cmd = Command::new("ffmpeg");
             cmd.arg("-y")
                 .arg("-use_wallclock_as_timestamps")
-                .arg("1")
-                .args(["-f", "rawvideo", "-pix_fmt", "rgb24", "-s", &format!("{width}x{height}"), "-i", "-"]);
+                .arg("1");
+
+            if has_vaapi && (ext == "mp4" || ext == "mkv" || ext == "mov") {
+                cmd.args(["-vaapi_device", "/dev/dri/renderD128"]);
+            }
+
+            cmd.args(["-f", "rawvideo", "-pix_fmt", "rgb24", "-s", &format!("{width}x{height}"), "-i", "-"]);
 
             let audio_active = !audio_source.is_empty() && audio_source != "none" && audio_source != "disabled";
             if audio_active {
@@ -68,7 +76,7 @@ impl VideoRecorder {
                 }
             }
 
-            // Codecs baseados na extensão
+            // Codecs baseados na extensão e aceleração por hardware
             match ext {
                 "webm" => {
                     cmd.args(["-c:v", "libvpx-vp9", "-b:v", "2M"]);
@@ -82,20 +90,26 @@ impl VideoRecorder {
                         cmd.args(["-c:a", "mp3", "-b:a", "192k"]);
                     }
                 }
-                "mkv" => {
-                    cmd.args(["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]);
-                    if audio_active {
-                        cmd.args(["-c:a", "aac", "-b:a", "192k"]);
-                    }
-                }
                 _ => {
-                    // mp4 / mov
-                    cmd.args([
-                        "-c:v", "libx264",
-                        "-preset", "ultrafast",
-                        "-pix_fmt", "yuv420p",
-                        "-movflags", "+faststart",
-                    ]);
+                    // mp4 / mkv / mov
+                    if has_vaapi {
+                        crate::core::log::log("INFO", "gravador de vídeo usando aceleração por GPU (VA-API H.264)");
+                        cmd.args([
+                            "-vf", "format=nv12,hwupload",
+                            "-c:v", "h264_vaapi",
+                            "-qp", "22",
+                        ]);
+                    } else {
+                        crate::core::log::log("INFO", "gravador de vídeo usando codificador CPU (libx264)");
+                        cmd.args([
+                            "-c:v", "libx264",
+                            "-preset", "ultrafast",
+                            "-pix_fmt", "yuv420p",
+                        ]);
+                    }
+                    if ext == "mp4" || ext == "mov" {
+                        cmd.args(["-movflags", "+faststart"]);
+                    }
                     if audio_active {
                         cmd.args(["-c:a", "aac", "-b:a", "192k"]);
                     }

@@ -30,6 +30,8 @@ jobs:
 
       - name: Build Debian (.deb) package
         run: ./packaging/deb/build-deb.sh
+        env:
+          LENVIX_VERSION: ${{ github.ref_name }}
 
       - name: Build Standalone Binary Tarball (.tar.gz)
         run: |
@@ -63,9 +65,13 @@ jobs:
 
       - name: Build AppImage (.AppImage)
         run: ./packaging/appimage/build-appimage.sh
+        env:
+          LENVIX_VERSION: ${{ github.ref_name }}
 
       - name: Build RPM package (.rpm)
         run: ./packaging/rpm/build-rpm.sh
+        env:
+          LENVIX_VERSION: ${{ github.ref_name }}
 
       - name: Create GitHub Release and Upload Assets
         uses: softprops/action-gh-release@v2

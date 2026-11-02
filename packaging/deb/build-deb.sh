@@ -4,7 +4,8 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../.." && pwd)"
 BUILD_DIR="$ROOT/target/deb-build"
-VERSION="${LENVIX_VERSION:-0.5.0}"
+VERSION="${LENVIX_VERSION:-$(grep -m1 '^version = ' "$ROOT/Cargo.toml" | cut -d '"' -f2)}"
+VERSION="${VERSION#v}"
 DEB_NAME="lenvix_${VERSION}_amd64.deb"
 
 rm -rf "$BUILD_DIR"

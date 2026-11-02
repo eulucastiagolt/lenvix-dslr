@@ -66,6 +66,10 @@ pub enum EngineCmd {
     SetLanguage(String),
     /// Configura efeitos de fundo virtual (Google Meet style: desfoque/imagem)
     SetVirtualBackground(crate::core::segmentation::VirtualBackgroundConfig),
+    /// Ativa/desativa aceleração por hardware (GPU)
+    SetUseGpu(bool),
+    /// Configura se o aplicativo deve continuar em segundo plano ao fechar a janela
+    SetKeepInBackground(bool),
     /// Inicia gravação contínua do stream de vídeo (FR-17b)
     StartRecording,
     /// Finaliza a gravação de vídeo
@@ -118,6 +122,8 @@ pub enum EngineEv {
         background_mode: String,
         blur_density: u32,
         background_image: String,
+        use_gpu: bool,
+        keep_in_background: bool,
     },
     /// câmera conectada/desconectada (preview anda/para; standby assume)
     Connected(bool),
@@ -476,6 +482,8 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
     // sincroniza a GUI com o estado salvo ANTES de qualquer interação
     let mut language = saved.language.clone();
     let mut auto_suspend_preview = saved.auto_suspend_preview;
+    let mut use_gpu = saved.use_gpu;
+    let mut keep_in_background = saved.keep_in_background;
     let mut gui_preview_active = true;
     let mut yuyv_buf: Vec<u8> = Vec::new();
 
@@ -512,6 +520,8 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
         background_mode: vb_config.mode.as_str().to_string(),
         blur_density: vb_config.blur_density,
         background_image: vb_config.image_path.clone().unwrap_or_default(),
+        use_gpu,
+        keep_in_background,
     });
     let mut conflicted_devices: std::collections::HashSet<u32> = std::collections::HashSet::new();
     send_devices_list(ev_tx, video_device, &conflicted_devices);
@@ -538,6 +548,8 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                 background_mode: vb_config.mode.as_str().to_string(),
                 blur_density: vb_config.blur_density,
                 background_image: vb_config.image_path.clone().unwrap_or_default(),
+                use_gpu,
+                keep_in_background,
             }
         };
     }
@@ -912,6 +924,16 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                         ),
                     );
                 }
+                EngineCmd::SetUseGpu(b) => {
+                    use_gpu = b;
+                    save_st(true, &current_settings!());
+                    crate::core::log::log("INFO", &format!("aceleração por GPU alterada para: {use_gpu}"));
+                }
+                EngineCmd::SetKeepInBackground(b) => {
+                    keep_in_background = b;
+                    save_st(true, &current_settings!());
+                    crate::core::log::log("INFO", &format!("manter em segundo plano alterado para: {keep_in_background}"));
+                }
                 EngineCmd::StartRecording => {
                     if recorder.is_some() {
                         continue;
@@ -939,7 +961,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                     }
                     let session = session_dir();
                     let (rw, rh) = transf.out.unwrap_or((1920, 1080));
-                    match crate::core::recorder::VideoRecorder::start(&session, rw, rh, &audio_source, &video_format) {
+                    match crate::core::recorder::VideoRecorder::start(&session, rw, rh, &audio_source, &video_format, use_gpu) {
                         Ok(rec) => {
                             let path_s = rec.path().to_string_lossy().into_owned();
                             crate::core::log::log("INFO", &format!("gravação iniciada: {path_s}"));

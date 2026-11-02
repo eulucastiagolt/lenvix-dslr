@@ -27,6 +27,11 @@
     <binary>lenvix</binary>
   </provides>
   <releases>
+    <release version="0.6.0" date="2026-11-02">
+      <description>
+        <p>Aceleração por hardware na GPU (GPU acceleration com VA-API e NVENC para renderização de texturas e codificação de vídeo com consumo mínimo de CPU), controle de execução em segundo plano nas preferências (escolha entre manter na bandeja ou fechar o aplicativo), e correções de marcação Pango.</p>
+      </description>
+    </release>
     <release version="0.5.0" date="2026-11-02">
       <description>
         <p>Efeitos visuais de fundo virtual (Google Meet style): desfoque de fundo (background blur) com densidade ajustável em tempo real, substituição do fundo por imagem personalizada com corte e escala inteligentes (aspect-fill), e segmentação neural em tempo real executada em puro Rust com MediaPipe Selfie Segmentation.</p>

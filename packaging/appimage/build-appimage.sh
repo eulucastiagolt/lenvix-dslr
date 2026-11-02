@@ -3,7 +3,8 @@ set -e
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../.." && pwd)"
-VERSION="${LENVIX_VERSION:-0.5.0}"
+VERSION="${LENVIX_VERSION:-$(grep -m1 '^version = ' "$ROOT/Cargo.toml" | cut -d '"' -f2)}"
+VERSION="${VERSION#v}"
 APP_DIR="$ROOT/target/AppDir"
 
 rm -rf "$APP_DIR"

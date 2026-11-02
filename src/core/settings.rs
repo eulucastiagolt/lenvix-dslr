@@ -28,6 +28,10 @@ pub struct Settings {
     pub blur_density: u32,
     /// Caminho da imagem de fundo personalizada.
     pub background_image: String,
+    /// Usar aceleração por hardware (GPU) sempre que disponível.
+    pub use_gpu: bool,
+    /// Manter aplicativo em segundo plano na bandeja ao fechar a janela.
+    pub keep_in_background: bool,
 }
 
 impl Default for Settings {
@@ -50,6 +54,8 @@ impl Default for Settings {
             background_mode: "off".into(),
             blur_density: 40,
             background_image: String::new(),
+            use_gpu: true,
+            keep_in_background: true,
         }
     }
 }
@@ -177,6 +183,16 @@ pub fn load() -> Settings {
             "background_image" => {
                 s.background_image = v.to_string();
             }
+            "use_gpu" => {
+                if let Ok(b) = v.parse::<bool>() {
+                    s.use_gpu = b;
+                }
+            }
+            "keep_in_background" => {
+                if let Ok(b) = v.parse::<bool>() {
+                    s.keep_in_background = b;
+                }
+            }
             _ => {}
         }
     }
@@ -195,7 +211,7 @@ pub fn save(s: &Settings) {
          fps={}\nwebcam={}\nmirror={}\nzoom={:.3}\npan_x={}\npan_y={}\n\
          out_w={}\nout_h={}\nautoconnect={}\nvideo_device={}\n\
          audio_source={}\nvideo_format={}\nvisible_controls={}\nlanguage={}\nauto_suspend_preview={}\n\
-         background_mode={}\nblur_density={}\nbackground_image={}\n",
+         background_mode={}\nblur_density={}\nbackground_image={}\nuse_gpu={}\nkeep_in_background={}\n",
         s.fps,
         s.webcam,
         s.mirror,
@@ -214,6 +230,8 @@ pub fn save(s: &Settings) {
         s.background_mode,
         s.blur_density,
         s.background_image,
+        s.use_gpu,
+        s.keep_in_background,
     );
     let tmp = dir.join("settings.conf.tmp");
     if let Err(e) = std::fs::write(&tmp, txt) {

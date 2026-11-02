@@ -391,3 +391,17 @@ msgstr ""
 msgid "Images (JPEG, PNG, WebP)"
 msgstr ""
 
+# Application & Performance (v0.6.0)
+msgid "Hardware acceleration (GPU)"
+msgstr ""
+
+msgid "Uses GPU for rendering and video encoding when available."
+msgstr ""
+
+msgid "Keep running in background when closed"
+msgstr ""
+
+msgid "When closing the window, keeps the app running in the system tray."
+msgstr ""
+
+

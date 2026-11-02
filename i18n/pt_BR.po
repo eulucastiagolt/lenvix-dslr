@@ -388,3 +388,17 @@ msgstr "Selecionar imagem de fundo"
 msgid "Images (JPEG, PNG, WebP)"
 msgstr "Imagens (JPEG, PNG, WebP)"
 
+# Application & Performance (v0.6.0)
+msgid "Hardware acceleration (GPU)"
+msgstr "Aceleração por hardware (GPU)"
+
+msgid "Uses GPU for rendering and video encoding when available."
+msgstr "Usa a GPU para renderização e codificação de vídeo quando disponível."
+
+msgid "Keep running in background when closed"
+msgstr "Manter em segundo plano ao fechar"
+
+msgid "When closing the window, keeps the app running in the system tray."
+msgstr "Ao fechar a janela, mantém o aplicativo em execução na bandeja do sistema."
+
+
