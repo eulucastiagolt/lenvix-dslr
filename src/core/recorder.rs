@@ -113,7 +113,7 @@ impl VideoRecorder {
 
             let child = cmd
                 .spawn()
-                .map_err(|e| format!("falha ao iniciar ffmpeg: {e}"))?;
+                .map_err(|e| crate::core::i18n::trf("failed to start ffmpeg: {e}", &[("e", e.to_string())]))?;
 
             Ok(Self {
                 path,
@@ -126,7 +126,7 @@ impl VideoRecorder {
         } else {
             let path = dest_dir.join(format!("lenvix_video_{now}.raw"));
             let file = std::fs::File::create(&path)
-                .map_err(|e| format!("falha ao criar arquivo de gravação: {e}"))?;
+                .map_err(|e| crate::core::i18n::trf("failed to create recording file: {e}", &[("e", e.to_string())]))?;
             Ok(Self {
                 path,
                 started_at: Instant::now(),
@@ -142,15 +142,15 @@ impl VideoRecorder {
         match &mut self.backend {
             RecorderBackend::Ffmpeg { child } => {
                 if let Some(stdin) = child.stdin.as_mut() {
-                    stdin.write_all(rgb).map_err(|e| format!("erro ao gravar frame: {e}"))?;
+                    stdin.write_all(rgb).map_err(|e| crate::core::i18n::trf("failed to write frame: {e}", &[("e", e.to_string())]))?;
                     self.frames_count += 1;
                     Ok(())
                 } else {
-                    Err("stdin do gravador fechado".into())
+                    Err(crate::core::i18n::tr("recorder stdin closed"))
                 }
             }
             RecorderBackend::Fallback { file } => {
-                file.write_all(rgb).map_err(|e| format!("erro ao gravar frame: {e}"))?;
+                file.write_all(rgb).map_err(|e| crate::core::i18n::trf("failed to write frame: {e}", &[("e", e.to_string())]))?;
                 self.frames_count += 1;
                 Ok(())
             }
@@ -184,7 +184,7 @@ impl VideoRecorder {
                 drop(child.stdin.take());
                 let status = child.wait().map_err(|e| format!("erro ao finalizar gravação: {e}"))?;
                 if !status.success() {
-                    return Err(format!("ffmpeg finalizou com erro: {status}"));
+                    return Err(crate::core::i18n::trf("ffmpeg exited with error: {status}", &[("status", status.to_string())]));
                 }
             }
             RecorderBackend::Fallback { mut file } => {

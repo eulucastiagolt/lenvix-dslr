@@ -23,18 +23,19 @@ fn get_base_standby() -> &'static (u32, u32, Vec<u8>) {
     })
 }
 
-/// RGB8 (interleaved) → YUYV 4:2:2 packed (BT.601, full→limited).
-/// YUYV: pares de pixels compartilham U/V: [Y0 U Y1 V] = 4 bytes / 2 pixels.
-/// Croma é decimado pela média dos dois pixels do par (4:2:2 fiel).
-pub fn rgb_to_yuyv(rgb: &[u8], w: u32, h: u32) -> Vec<u8> {
+/// RGB8 (interleaved) → YUYV 4:2:2 packed (BT.601, full→limited) reutilizando buffer.
+pub fn rgb_to_yuyv_into(rgb: &[u8], w: u32, h: u32, out: &mut Vec<u8>) {
     debug_assert_eq!(rgb.len(), (w * h * 3) as usize);
-    let mut yuyv = vec![0u8; (w * h * 2) as usize];
+    let target_len = (w * h * 2) as usize;
+    if out.len() != target_len {
+        out.resize(target_len, 0);
+    }
     for y in 0..h {
         let row = (y * w * 3) as usize;
         let out_row = (y * w * 2) as usize;
         for x_pair in 0..(w / 2) as usize {
             let px = row + x_pair * 6;
-            let out = out_row + x_pair * 4;
+            let out_idx = out_row + x_pair * 4;
             let (r0, g0, b0) = (rgb[px] as i32, rgb[px + 1] as i32, rgb[px + 2] as i32);
             let (r1, g1, b1) = (
                 rgb.get(px + 3).copied().unwrap_or(r0 as u8) as i32,
@@ -42,17 +43,25 @@ pub fn rgb_to_yuyv(rgb: &[u8], w: u32, h: u32) -> Vec<u8> {
                 rgb.get(px + 5).copied().unwrap_or(b0 as u8) as i32,
             );
             // Y por pixel
-            yuyv[out] = clamp8(((66 * r0 + 129 * g0 + 25 * b0 + 138) >> 8) + 16);
-            yuyv[out + 2] = clamp8(((66 * r1 + 129 * g1 + 25 * b1 + 138) >> 8) + 16);
+            out[out_idx] = clamp8(((66 * r0 + 129 * g0 + 25 * b0 + 138) >> 8) + 16);
+            out[out_idx + 2] = clamp8(((66 * r1 + 129 * g1 + 25 * b1 + 138) >> 8) + 16);
             // Croma: média dos dois pixels do par (4:2:2; linear ⇒ média exata).
             // escala /256 (>>8): aritmética BT.601 padrão
             let (r, g, b) = ((r0 + r1) / 2, (g0 + g1) / 2, (b0 + b1) / 2);
             let u = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
             let v = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
-            yuyv[out + 1] = clamp8(u);
-            yuyv[out + 3] = clamp8(v);
+            out[out_idx + 1] = clamp8(u);
+            out[out_idx + 3] = clamp8(v);
         }
     }
+}
+
+/// RGB8 (interleaved) → YUYV 4:2:2 packed (BT.601, full→limited).
+/// YUYV: pares de pixels compartilham U/V: [Y0 U Y1 V] = 4 bytes / 2 pixels.
+/// Croma é decimado pela média dos dois pixels do par (4:2:2 fiel).
+pub fn rgb_to_yuyv(rgb: &[u8], w: u32, h: u32) -> Vec<u8> {
+    let mut yuyv = Vec::with_capacity((w * h * 2) as usize);
+    rgb_to_yuyv_into(rgb, w, h, &mut yuyv);
     yuyv
 }
 
@@ -97,13 +106,15 @@ pub fn pattern_rgb(w: u32, h: u32) -> Vec<u8> {
 
 /// RGB8 → RGBA8 (para textura GTK; opaque alpha 255)
 pub fn rgb_to_rgba(rgb: &[u8], out: &mut Vec<u8>) {
-    out.clear();
-    out.reserve(rgb.len() / 3 * 4);
-    for chunk in rgb.as_chunks::<3>().0 {
-        out.push(chunk[0]);
-        out.push(chunk[1]);
-        out.push(chunk[2]);
-        out.push(255);
+    let out_len = (rgb.len() / 3) * 4;
+    out.resize(out_len, 255);
+    let chunks_in = rgb.as_chunks::<3>().0;
+    let chunks_out = out.as_chunks_mut::<4>().0;
+    for (src, dst) in chunks_in.iter().zip(chunks_out.iter_mut()) {
+        dst[0] = src[0];
+        dst[1] = src[1];
+        dst[2] = src[2];
+        dst[3] = 255;
     }
 }
 

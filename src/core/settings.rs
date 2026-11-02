@@ -18,6 +18,10 @@ pub struct Settings {
     pub audio_source: String,
     pub video_format: String,
     pub visible_controls: Vec<String>,
+    /// Idioma da UI ("") = segue o ambiente (LC_ALL/LANG). Ex.: "pt_BR".
+    pub language: String,
+    /// Suspender processamento do preview ao minimizar ou perder foco para poupar CPU/RAM.
+    pub auto_suspend_preview: bool,
 }
 
 impl Default for Settings {
@@ -35,6 +39,8 @@ impl Default for Settings {
             audio_source: "default".into(),
             video_format: "mp4".into(),
             visible_controls: default_visible_controls(),
+            language: String::new(),
+            auto_suspend_preview: true,
         }
     }
 }
@@ -140,6 +146,14 @@ pub fn load() -> Settings {
                     s.visible_controls = list;
                 }
             }
+            "language" => {
+                s.language = v.to_string();
+            }
+            "auto_suspend_preview" => {
+                if let Ok(b) = v.parse::<bool>() {
+                    s.auto_suspend_preview = b;
+                }
+            }
             _ => {}
         }
     }
@@ -157,7 +171,7 @@ pub fn save(s: &Settings) {
         "# lenvix — configurações do app (gerado automaticamente)\n\
          fps={}\nwebcam={}\nmirror={}\nzoom={:.3}\npan_x={}\npan_y={}\n\
          out_w={}\nout_h={}\nautoconnect={}\nvideo_device={}\n\
-         audio_source={}\nvideo_format={}\nvisible_controls={}\n",
+         audio_source={}\nvideo_format={}\nvisible_controls={}\nlanguage={}\nauto_suspend_preview={}\n",
         s.fps,
         s.webcam,
         s.mirror,
@@ -171,6 +185,8 @@ pub fn save(s: &Settings) {
         s.audio_source,
         s.video_format,
         s.visible_controls.join(","),
+        s.language,
+        s.auto_suspend_preview,
     );
     let tmp = dir.join("settings.conf.tmp");
     if let Err(e) = std::fs::write(&tmp, txt) {

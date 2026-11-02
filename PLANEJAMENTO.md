@@ -314,8 +314,18 @@ segundo plano (daemon + tray) mesmo com a janela fechada.
 - Diagnóstico CLI `--status` detalhado (configurações, devices loopback, câmeras e sessão);
 - Flags adicionais `--help` e `--version`.
 
-**Fase 5 (opcional) — extras Entangle**
-- Histograma, gestão de cor ICC, perfis de configuração salvos, plugins.
+**Fase 5 — Internacionalização (i18n), Otimização de Performance e Gerenciamento de Memória do Preview (Executada)**
+- **Internacionalização completa (i18n)** baseada no padrão GNU `gettext`: catálogo com mensagens-base em inglês (msgid), catálogo em português brasileiro (`i18n/pt_BR.po`), template (`i18n/lenvix.pot`), detecção automática de ambiente (`LC_ALL`/`LANG`) e seletor explícito de idioma nas configurações;
+- **Otimizações críticas de performance e redução de alocações**: vetorização SIMD em `rgb_to_rgba`, buffer pooling contínuo em `rgb_to_yuyv_into` (eliminando ~120 MB/s de alocações na pilha gráfica);
+- **Ocultação e suspensão sob demanda do Preview (estilo OBS Studio)**:
+  - Botão de alternância rápida no cabeçalho e opção no menu de contexto do preview;
+  - Placeholder visual informativo quando suspenso, liberando texturas gráficas via `set_paintable(None)` para liberar memória RAM e VRAM;
+  - Suspensão da captura contínua USB quando o preview estiver oculto e nem a webcam virtual nem a gravação estiverem ativas, economizando até 100% de uso de CPU, poupando calor do sensor e bateria da câmera DSLR;
+- **Auto-suspensão de Preview por perda de foco / minimização**:
+  - Detecção nativa via GTK (`is_active`, `visible`, `suspended`), pausando automaticamente a renderização e o decode de preview quando o usuário estiver em outro aplicativo ou minimizar a janela;
+  - Reativação suave e instantânea assim que a janela é focada novamente;
+  - Opção configurável e persistente nas configurações (`auto_suspend_preview`).
+- **Empacotamento com suporte a auto-update (Zsync)**: AppImage com `.upd_info` embutido e geração automática de `.zsync` para AppImageUpdate/AppManager.
 
 **Fase 6 — Suporte Multiplataforma: Windows (Última Fase)**
 - Abstração do backend de webcam virtual: DirectShow Filter / Media Foundation Virtual Camera (driver OBS VirtualCam ou AkVirtualCamera) via `#[cfg(target_os = "windows")]`.
@@ -599,6 +609,36 @@ Implementado (novo `core/config.rs` + extensões em `core/camera.rs` e `gui/app.
    - Suporte a `--help` / `-h` e `--version` / `-v`.
 4. **Correção de Estabilidade de Layout (v0.2.1)**:
    - Travamento de dimensões horizontais e quebra de texto/elipsização com `max_width_chars` e `WrapMode::WordChar` nos rótulos de status e nos painéis laterais de controle e configurações, eliminando expansões involuntárias e preservando o espaço do preview.
+
+### 10.6 Fase 5 — Internacionalização, Otimização de Performance e Controle de Preview (Executada)
+
+1. **Internacionalização (i18n) via gettext**:
+   - Módulo [`src/core/i18n.rs`] com parsing e cache via `OnceLock<gettext::Catalog>`;
+   - Rastreamento em diretórios padrão: `LENVIX_I18N_DIR`, `$APPDIR/usr/share/lenvix/i18n`, `~/.local/share/lenvix/i18n`, `./i18n` e `/usr/share/lenvix/i18n`;
+   - Arquivos [`i18n/lenvix.pot`] e [`i18n/pt_BR.po`] com 100% das mensagens do app, notificações e controles traduzidos;
+   - Seletor de idioma na tela de configurações persistido em `settings.conf`.
+
+2. **Otimizações de Performance e Redução de Alocações**:
+   - `rgb_to_rgba` reescrita com vetorização e processamento em chunks (`as_chunks_mut`), substituindo chamadas repetidas de `push`;
+   - Criação de `rgb_to_yuyv_into` reutilizando um buffer persistente de alocação no loop principal da câmera, eliminando ~4 MB de alocações por frame (120 MB/s de alocação/desalocação contínua);
+   - Substituição de snapshots repetitivos de configurações por macro sem custo de heap `current_settings!()`.
+
+3. **Gerenciamento de Memória e Ocultação Manual do Preview (estilo OBS Studio)**:
+   - Alternância em pilha GTK (`gtk4::Stack`) entre o `gtk4::Picture` e uma tela informativa (`suspend_box`);
+   - Botão de atalho rápido na barra de título (`btn_toggle_preview`), botão central no placeholder e ação no menu de contexto (clique com botão direito no frame);
+   - Liberação imediata de texturas gráficas com `picture.set_paintable(None)`, descarregando frames da memória RAM e GPU;
+   - Emissão de comando `EngineCmd::SetGuiPreviewActive(bool)` notificando a engine para suprimir conversões RGBA e envio de frames pesados pela fila;
+   - Em modo ocioso (sem preview na GUI e sem webcam/gravação ativas), o loop de captura de preview da câmera é suspenso, reduzindo o consumo de CPU a zero e preservando o sensor térmico e bateria da câmera.
+
+4. **Auto-suspensão Inteligente por Perda de Foco ou Minimização**:
+   - Monitoramento direto dos sinais nativos do GTK: `connect_is_active_notify`, `connect_visible_notify` e `connect_suspended_notify`;
+   - Quando o usuário minimiza a janela ou foca em outro aplicativo, o preview é imediatamente suspenso, preservando recursos do sistema;
+   - Ao restaurar o foco ou maximizar, o preview é retomado instantaneamente (respeitando se o usuário não o ocultou manualmente);
+   - Configuração comutável nas configurações do app (`auto_suspend_preview`).
+
+5. **Distribuição com Auto-Update via Zsync**:
+   - Atualização do `build-appimage.sh` para embutir informação `gh-releases-zsync` e gerar o artefato `.zsync` via `zsyncmake`;
+   - Inclusão dos diretórios de tradução `i18n/` nos geradores de pacotes (.AppImage, .deb, .tar.gz).
 
 ---
 

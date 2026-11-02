@@ -27,6 +27,11 @@
     <binary>lenvix</binary>
   </provides>
   <releases>
+    <release version="0.4.0" date="2026-11-02">
+      <description>
+        <p>Internacionalização completa (i18n) com suporte a gettext (Português do Brasil e Inglês), otimizações de performance com vetorização SIMD e buffer pooling contínuo (eliminando alocações transitórias na pipeline de vídeo), suspensão sob demanda do preview para preservar memória e CPU, auto-suspensão inteligente ao perder foco ou minimizar a janela, e suporte a auto-atualização do AppImage via Zsync.</p>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-10-29">
       <description>
         <p>Gravação de áudio integrada, sincronização em tempo real (wallclock), formatos de vídeo múltiplos (MP4, MKV, WebM, MOV, AVI), menu de contexto na galeria com opção de excluir mídias e filtro de controles visíveis da câmera personalizável na tela de configurações.</p>

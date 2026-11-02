@@ -1,6 +1,7 @@
 pub mod audio;
 pub mod camera;
 pub mod config;
+pub mod i18n;
 pub mod log;
 pub mod notify;
 pub mod recorder;

@@ -37,10 +37,13 @@ echo "==> 4. Gerando pacote Arch Linux (.pkg.tar.zst)..."
 
 echo "==> 5. Gerando pacote portátil (.tar.gz)..."
 TARDIR="dist/lenvix-v$VERSION-linux-x86_64"
-mkdir -p "$TARDIR/bin" "$TARDIR/share/applications" "$TARDIR/share/icons/hicolor/scalable/apps"
+mkdir -p "$TARDIR/bin" "$TARDIR/share/applications" "$TARDIR/share/icons/hicolor/scalable/apps" "$TARDIR/share/lenvix/i18n"
 cp target/release/lenvix "$TARDIR/bin/"
 cp assets/io.github.eulucastiagolt.lenvix.desktop "$TARDIR/share/applications/"
 cp assets/io.github.eulucastiagolt.lenvix.svg "$TARDIR/share/icons/hicolor/scalable/apps/"
+if [ -d "i18n" ]; then
+    cp -r i18n/* "$TARDIR/share/lenvix/i18n/"
+fi
 cp README.md "$TARDIR/"
 cat << 'EOF' > "$TARDIR/install.sh"
 #!/bin/sh
@@ -50,6 +53,10 @@ echo "Installing Lenvix to $PREFIX..."
 install -Dm755 bin/lenvix "$PREFIX/bin/lenvix"
 install -Dm644 share/applications/io.github.eulucastiagolt.lenvix.desktop "$PREFIX/share/applications/io.github.eulucastiagolt.lenvix.desktop"
 install -Dm644 share/icons/hicolor/scalable/apps/io.github.eulucastiagolt.lenvix.svg "$PREFIX/share/icons/hicolor/scalable/apps/io.github.eulucastiagolt.lenvix.svg"
+if [ -d share/lenvix/i18n ]; then
+    mkdir -p "$PREFIX/share/lenvix/i18n"
+    cp -r share/lenvix/i18n/* "$PREFIX/share/lenvix/i18n/"
+fi
 echo "Lenvix installed successfully!"
 EOF
 chmod +x "$TARDIR/install.sh"

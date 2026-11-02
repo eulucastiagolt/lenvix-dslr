@@ -2,7 +2,7 @@
 //!
 //! Camadas: main → tray (SNI) + core-camera (thread gphoto2) + GUI (GTK4).
 
-use lenvix::{core::camera::CameraEngine, gui::{self, app::activate, UiAction}, tray};
+use lenvix::{core::{camera::CameraEngine, i18n}, gui::{self, app::activate, UiAction}, tray};
 
 
 use std::{cell::RefCell, rc::Rc};
@@ -44,6 +44,9 @@ fn main() {
             _ => {}
         }
     }
+
+    // i18n: carrega idioma explícito ou detecta via ambiente (fallback inglês)
+    i18n::init(Some(&lenvix::core::settings::load().language));
 
     // core-camera (thread própria; GUI consome eventos)
     let engine = Rc::new(RefCell::new(CameraEngine::spawn()));

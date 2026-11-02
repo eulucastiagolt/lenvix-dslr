@@ -1,0 +1,358 @@
+# Translation template for Lenvix.
+# Copyright (C) 2026 Lucas Tiago
+# This file is distributed under the same license as the Lenvix package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: lenvix 0.4.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-02 14:30-0300\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+# Controls catalog
+msgid "ISO"
+msgstr ""
+
+msgid "Shutter speed"
+msgstr ""
+
+msgid "Aperture"
+msgstr ""
+
+msgid "White balance"
+msgstr ""
+
+msgid "Exposure compensation"
+msgstr ""
+
+msgid "Focus mode"
+msgstr ""
+
+msgid "Image format"
+msgstr ""
+
+msgid "Flash mode"
+msgstr ""
+
+msgid "Metering mode"
+msgstr ""
+
+msgid "Program mode (P/A/S/M)"
+msgstr ""
+
+msgid "Capture target"
+msgstr ""
+
+# Tray & main headers
+msgid "DSLR camera → virtual webcam"
+msgstr ""
+
+msgid "Show window"
+msgstr ""
+
+msgid "Virtual webcam"
+msgstr ""
+
+msgid "Quit"
+msgstr ""
+
+msgid "Hide preview (save CPU and memory)"
+msgstr ""
+
+msgid "Show preview"
+msgstr ""
+
+msgid "App settings"
+msgstr ""
+
+msgid "camera not connected"
+msgstr ""
+
+msgid "starting…"
+msgstr ""
+
+msgid "webcam: starting…"
+msgstr ""
+
+msgid "Settings and camera selection"
+msgstr ""
+
+msgid "No camera detected"
+msgstr ""
+
+msgid "Settings — Lenvix"
+msgstr ""
+
+msgid "<b>Camera Selection</b>"
+msgstr ""
+
+msgid "Choose which DSLR or mirrorless camera connected via USB should be used:"
+msgstr ""
+
+msgid "Search connected cameras now"
+msgstr ""
+
+msgid "Open this screen to detect connected cameras."
+msgstr ""
+
+msgid "<b>Video Recording &amp; Audio</b>"
+msgstr ""
+
+msgid "Configure the microphone/audio device and the file format for recordings:"
+msgstr ""
+
+msgid "System default"
+msgstr ""
+
+msgid "No audio (muted)"
+msgstr ""
+
+msgid "Audio input:"
+msgstr ""
+
+msgid "Video format:"
+msgstr ""
+
+msgid "<b>Camera Controls</b>"
+msgstr ""
+
+msgid "Check the controls that should appear in the “Settings” panel. Unchecked items stay hidden:"
+msgstr ""
+
+msgid "Application & Performance"
+msgstr ""
+
+msgid "Configure general options, language and performance optimizations:"
+msgstr ""
+
+msgid "Language:"
+msgstr ""
+
+msgid "System (default)"
+msgstr ""
+
+msgid "Auto-suspend preview when minimized or inactive"
+msgstr ""
+
+msgid "Saves CPU and RAM by pausing preview rendering when the window loses focus."
+msgstr ""
+
+msgid "Close"
+msgstr ""
+
+msgid "Connect camera"
+msgstr ""
+
+msgid "Disconnect camera"
+msgstr ""
+
+msgid "Photo (full-res)"
+msgstr ""
+
+msgid "captures to the card and downloads to the local session"
+msgstr ""
+
+msgid "Record video"
+msgstr ""
+
+msgid "record the live stream to a video file"
+msgstr ""
+
+msgid "Auto-connect USB"
+msgstr ""
+
+msgid "<b>Virtual Webcam</b>"
+msgstr ""
+
+msgid "Create new output"
+msgstr ""
+
+msgid "Mirror image"
+msgstr ""
+
+msgid "Target FPS:"
+msgstr ""
+
+msgid "Zoom / Crop (OBS 16:9):"
+msgstr ""
+
+msgid "Pan horizontal:"
+msgstr ""
+
+msgid "Pan vertical:"
+msgstr ""
+
+msgid "Virtual output (16:9):"
+msgstr ""
+
+msgid "Preview Suspended"
+msgstr ""
+
+msgid "Disabled to save memory and CPU."
+msgstr ""
+
+msgid "Enable Preview"
+msgstr ""
+
+msgid "Enable preview"
+msgstr ""
+
+msgid "Disable preview (save memory/CPU)"
+msgstr ""
+
+msgid "preview suspended"
+msgstr ""
+
+msgid "Capture photo (full-res)"
+msgstr ""
+
+msgid "Start Live View"
+msgstr ""
+
+msgid "Stop Live View"
+msgstr ""
+
+msgid "Open session folder"
+msgstr ""
+
+msgid "Settings"
+msgstr ""
+
+msgid "Session"
+msgstr ""
+
+msgid "Open folder"
+msgstr ""
+
+msgid "photos saved in: {dir}"
+msgstr ""
+
+msgid "Open file"
+msgstr ""
+
+msgid "Open folder"
+msgstr ""
+
+msgid "Copy path"
+msgstr ""
+
+msgid "Delete media…"
+msgstr ""
+
+msgid "Confirm deletion"
+msgstr ""
+
+msgid "Delete “{name}” from disk permanently?\n\nThis cannot be undone."
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Delete"
+msgstr ""
+
+msgid "active"
+msgstr ""
+
+msgid "in use / unavailable"
+msgstr ""
+
+msgid "available"
+msgstr ""
+
+msgid "Live View active (continuous preview)"
+msgstr ""
+
+msgid "camera connected (shutter closed)"
+msgstr ""
+
+msgid "connected (shutter closed)"
+msgstr ""
+
+msgid "camera connected (shutter closed — start Live View for preview)"
+msgstr ""
+
+msgid "standby — connect a camera for preview"
+msgstr ""
+
+msgid "webcam: off"
+msgstr ""
+
+msgid "camera connected"
+msgstr ""
+
+msgid "webcam: {name}"
+msgstr ""
+
+msgid "webcam active — {name}"
+msgstr ""
+
+msgid "capture in progress…"
+msgstr ""
+
+msgid "photo saved: {p}"
+msgstr ""
+
+msgid "recording video: {path}"
+msgstr ""
+
+msgid "Lenvix — error"
+msgstr ""
+
+# Core notifications & messages
+msgid "stop the recording before turning off Live View"
+msgstr ""
+
+msgid "no camera detected — plug in via USB and click Connect"
+msgstr ""
+
+msgid "recording aborted: camera disconnected"
+msgstr ""
+
+msgid "config: camera not connected"
+msgstr ""
+
+msgid "capture: camera not connected"
+msgstr ""
+
+msgid "button {name}: camera not connected"
+msgstr ""
+
+msgid "connect a camera to record video"
+msgstr ""
+
+msgid "Lenvix — Recording Started"
+msgstr ""
+
+msgid "Saving as: {name}"
+msgstr ""
+
+msgid "Lenvix — Recording Finished"
+msgstr ""
+
+msgid "recording aborted: camera disconnected (USB)"
+msgstr ""
+
+msgid "Lenvix — Photo Captured"
+msgstr ""
+
+msgid "recorder stdin closed"
+msgstr ""
+
+msgid "failed to start ffmpeg: {e}"
+msgstr ""
+
+msgid "failed to create recording file: {e}"
+msgstr ""
+
+msgid "failed to write frame: {e}"
+msgstr ""
+
+msgid "ffmpeg exited with error: {status}"
+msgstr ""

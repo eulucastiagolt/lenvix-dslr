@@ -33,10 +33,16 @@ jobs:
 
       - name: Build Standalone Binary Tarball (.tar.gz)
         run: |
-          mkdir -p dist/lenvix-${{ github.ref_name }}-linux-x86_64/{bin,share/applications,share/icons/hicolor/scalable/apps}
+          mkdir -p dist/lenvix-${{ github.ref_name }}-linux-x86_64/bin \
+                   dist/lenvix-${{ github.ref_name }}-linux-x86_64/share/applications \
+                   dist/lenvix-${{ github.ref_name }}-linux-x86_64/share/icons/hicolor/scalable/apps \
+                   dist/lenvix-${{ github.ref_name }}-linux-x86_64/share/lenvix/i18n
           cp target/release/lenvix dist/lenvix-${{ github.ref_name }}-linux-x86_64/bin/
           cp assets/io.github.eulucastiagolt.lenvix.desktop dist/lenvix-${{ github.ref_name }}-linux-x86_64/share/applications/
           cp assets/io.github.eulucastiagolt.lenvix.svg dist/lenvix-${{ github.ref_name }}-linux-x86_64/share/icons/hicolor/scalable/apps/
+          if [ -d i18n ]; then
+            cp -r i18n/* dist/lenvix-${{ github.ref_name }}-linux-x86_64/share/lenvix/i18n/
+          fi
           cp README.md dist/lenvix-${{ github.ref_name }}-linux-x86_64/
           cat << 'EOF' > dist/lenvix-${{ github.ref_name }}-linux-x86_64/install.sh
           #!/bin/sh
@@ -46,6 +52,10 @@ jobs:
           install -Dm755 bin/lenvix "$PREFIX/bin/lenvix"
           install -Dm644 share/applications/io.github.eulucastiagolt.lenvix.desktop "$PREFIX/share/applications/io.github.eulucastiagolt.lenvix.desktop"
           install -Dm644 share/icons/hicolor/scalable/apps/io.github.eulucastiagolt.lenvix.svg "$PREFIX/share/icons/hicolor/scalable/apps/io.github.eulucastiagolt.lenvix.svg"
+          if [ -d share/lenvix/i18n ]; then
+            mkdir -p "$PREFIX/share/lenvix/i18n"
+            cp -r share/lenvix/i18n/* "$PREFIX/share/lenvix/i18n/"
+          fi
           echo "Lenvix installed successfully!"
           EOF
           chmod +x dist/lenvix-${{ github.ref_name }}-linux-x86_64/install.sh
@@ -62,11 +72,12 @@ jobs:
         with:
           name: Lenvix ${{ github.ref_name }}
           draft: false
-          prerelease: false
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
           generate_release_notes: true
           files: |
             dist/*.deb
             dist/*.rpm
             dist/*.tar.gz
             dist/*.AppImage
+            dist/*.zsync
             dist/*.pkg.tar.zst

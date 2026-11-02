@@ -1,7 +1,7 @@
 //! Tray: StatusNotifierItem via ksni (bloqueante/threads próprios).
 //! Menu fiel FR-27: abrir/fechar janela, webcam on/off, sair (com limpeza).
 
-use crate::core::camera::EngineCmd;
+use crate::core::{camera::EngineCmd, i18n};
 use crate::gui::UiAction;
 use crossbeam_channel::Sender;
 use ksni::{
@@ -61,7 +61,7 @@ impl Tray for LenvixTray {
             icon_name: self.icon_name(),
             icon_pixmap: vec![Icon { width: 0, height: 0, data: Vec::new() }],
             title: "Lenvix".into(),
-            description: "Câmera DSLR → webcam virtual".into(),
+            description: i18n::tr("DSLR camera → virtual webcam"),
         }
     }
 
@@ -73,7 +73,7 @@ impl Tray for LenvixTray {
 
         vec![
             MenuItem::Standard(StandardItem {
-                label: "Mostrar janela".into(),
+                label: i18n::tr("Show window"),
                 icon_name: "window-new-symbolic".into(),
                 activate: Box::new(move |_| {
                     let _ = action_show.send(UiAction::ShowWindow);
@@ -81,7 +81,7 @@ impl Tray for LenvixTray {
                 ..StandardItem::default()
             }),
             MenuItem::Checkmark(CheckmarkItem {
-                label: "Webcam virtual".into(),
+                label: i18n::tr("Virtual webcam"),
                 enabled: true,
                 checked: webcam_on,
                 activate: Box::new(move |tray| {
@@ -94,7 +94,7 @@ impl Tray for LenvixTray {
             }),
             MenuItem::Separator,
             MenuItem::Standard(StandardItem {
-                label: "Sair".into(),
+                label: i18n::tr("Quit"),
                 icon_name: "application-exit-symbolic".into(),
                 activate: Box::new(move |_| {
                     let _ = action_quit.send(UiAction::Quit);

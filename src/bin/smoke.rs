@@ -88,6 +88,7 @@ fn main() {
                 }
                 EngineEv::DevicesList { .. }
                 | EngineEv::LiveViewStatus(_)
+                | EngineEv::StreamStats { .. }
                 | EngineEv::RecordingStarted { .. }
                 | EngineEv::RecordingProgress { .. }
                 | EngineEv::RecordingDone { .. } => {}

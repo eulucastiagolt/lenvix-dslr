@@ -7,6 +7,7 @@ packaging/arch/*.pkg.tar*
 *.deb
 *.rpm
 *.AppImage
+*.zsync
 *.tar.gz
 **/*.rs.bk
 *.log

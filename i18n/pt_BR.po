@@ -1,0 +1,355 @@
+# Brazilian Portuguese translation for Lenvix.
+# Copyright (C) 2026 Lucas Tiago
+# This file is distributed under the same license as the Lenvix package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: lenvix 0.4.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-02 14:30-0300\n"
+"PO-Revision-Date: 2026-11-02 14:30-0300\n"
+"Last-Translator: Lucas Tiago <lucas@lenvix.local>\n"
+"Language-Team: Brazilian Portuguese <pt_BR@li.org>\n"
+"Language: pt_BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+# Controls catalog
+msgid "ISO"
+msgstr "ISO"
+
+msgid "Shutter speed"
+msgstr "Velocidade (obturador)"
+
+msgid "Aperture"
+msgstr "Abertura"
+
+msgid "White balance"
+msgstr "Balanço de branco"
+
+msgid "Exposure compensation"
+msgstr "Compensação de exposição"
+
+msgid "Focus mode"
+msgstr "Modo de foco"
+
+msgid "Image format"
+msgstr "Formato de imagem"
+
+msgid "Flash mode"
+msgstr "Modo de flash"
+
+msgid "Metering mode"
+msgstr "Fotometria"
+
+msgid "Program mode (P/A/S/M)"
+msgstr "Modo de programa (P/A/S/M)"
+
+msgid "Capture target"
+msgstr "Destino de captura"
+
+# Tray & main headers
+msgid "DSLR camera → virtual webcam"
+msgstr "Câmera DSLR → webcam virtual"
+
+msgid "Show window"
+msgstr "Mostrar janela"
+
+msgid "Virtual webcam"
+msgstr "Webcam virtual"
+
+msgid "Quit"
+msgstr "Sair"
+
+msgid "Hide preview (save CPU and memory)"
+msgstr "Ocultar preview (economizar CPU e memória)"
+
+msgid "Show preview"
+msgstr "Exibir preview"
+
+msgid "App settings"
+msgstr "Configurações do aplicativo"
+
+msgid "camera not connected"
+msgstr "câmera não conectada"
+
+msgid "starting…"
+msgstr "iniciando…"
+
+msgid "webcam: starting…"
+msgstr "webcam: iniciando…"
+
+msgid "Settings and camera selection"
+msgstr "Configurações e seleção de câmera"
+
+msgid "No camera detected"
+msgstr "Nenhuma câmera detectada"
+
+msgid "Settings — Lenvix"
+msgstr "Configurações — Lenvix"
+
+msgid "<b>Camera Selection</b>"
+msgstr "<b>Seleção de Câmera</b>"
+
+msgid "Choose which DSLR or mirrorless camera connected via USB should be used:"
+msgstr "Escolha qual câmera DSLR ou mirrorless conectada via USB deve ser utilizada:"
+
+msgid "Search connected cameras now"
+msgstr "Buscar câmeras conectadas agora"
+
+msgid "Open this screen to detect connected cameras."
+msgstr "Abra esta tela para detectar câmeras conectadas."
+
+msgid "<b>Video Recording &amp; Audio</b>"
+msgstr "<b>Gravação de Vídeo &amp; Áudio</b>"
+
+msgid "Configure the microphone/audio device and the file format for recordings:"
+msgstr "Configure o microfone/dispositivo de áudio e o formato do arquivo para as gravações:"
+
+msgid "System default"
+msgstr "Padrão do sistema"
+
+msgid "No audio (muted)"
+msgstr "Sem áudio (mudo)"
+
+msgid "Audio input:"
+msgstr "Entrada de áudio:"
+
+msgid "Video format:"
+msgstr "Formato do vídeo:"
+
+msgid "<b>Camera Controls</b>"
+msgstr "<b>Controles da Câmera</b>"
+
+msgid "Check the controls that should appear in the “Settings” panel. Unchecked items stay hidden:"
+msgstr "Marque os controles que devem aparecer no painel “Configurações”. Itens desmarcados ficam ocultos:"
+
+msgid "Application & Performance"
+msgstr "Aplicativo & Performance"
+
+msgid "Configure general options, language and performance optimizations:"
+msgstr "Configure opções gerais, idioma e otimizações de desempenho:"
+
+msgid "Language:"
+msgstr "Idioma:"
+
+msgid "System (default)"
+msgstr "Sistema (padrão)"
+
+msgid "Auto-suspend preview when minimized or inactive"
+msgstr "Suspender preview automaticamente ao minimizar ou perder foco"
+
+msgid "Saves CPU and RAM by pausing preview rendering when the window loses focus."
+msgstr "Economiza CPU e memória RAM pausando a renderização do preview quando a janela perde o foco."
+
+msgid "Close"
+msgstr "Fechar"
+
+msgid "Connect camera"
+msgstr "Conectar câmera"
+
+msgid "Disconnect camera"
+msgstr "Desconectar câmera"
+
+msgid "Photo (full-res)"
+msgstr "Foto (alta res)"
+
+msgid "captures to the card and downloads to the local session"
+msgstr "captura no cartão e baixa para a sessão local"
+
+msgid "Record video"
+msgstr "Gravar vídeo"
+
+msgid "record the live stream to a video file"
+msgstr "grava o stream ao vivo para um arquivo de vídeo"
+
+msgid "Auto-connect USB"
+msgstr "Auto-conectar USB"
+
+msgid "<b>Virtual Webcam</b>"
+msgstr "<b>Webcam Virtual</b>"
+
+msgid "Create new output"
+msgstr "Criar nova saída"
+
+msgid "Mirror image"
+msgstr "Espelhar imagem"
+
+msgid "Target FPS:"
+msgstr "FPS alvo:"
+
+msgid "Zoom / Crop (OBS 16:9):"
+msgstr "Zoom / Recorte (OBS 16:9):"
+
+msgid "Pan horizontal:"
+msgstr "Pan horizontal:"
+
+msgid "Pan vertical:"
+msgstr "Pan vertical:"
+
+msgid "Virtual output (16:9):"
+msgstr "Saída virtual (16:9):"
+
+msgid "Preview Suspended"
+msgstr "Pré-visualização Suspensa"
+
+msgid "Disabled to save memory and CPU."
+msgstr "Desativada para economizar memória e CPU."
+
+msgid "Enable Preview"
+msgstr "Habilitar Pré-visualização"
+
+msgid "Enable preview"
+msgstr "Habilitar pré-visualização"
+
+msgid "Disable preview (save memory/CPU)"
+msgstr "Ocultar pré-visualização (economizar CPU/memória)"
+
+msgid "preview suspended"
+msgstr "preview suspenso"
+
+msgid "Capture photo (full-res)"
+msgstr "Capturar foto (alta res)"
+
+msgid "Start Live View"
+msgstr "Iniciar Live View"
+
+msgid "Stop Live View"
+msgstr "Parar Live View"
+
+msgid "Open session folder"
+msgstr "Abrir pasta da sessão"
+
+msgid "Settings"
+msgstr "Configurações"
+
+msgid "Session"
+msgstr "Sessão"
+
+msgid "Open folder"
+msgstr "Abrir pasta"
+
+msgid "photos saved in: {dir}"
+msgstr "fotos salvas em: {dir}"
+
+msgid "Open file"
+msgstr "Abrir arquivo"
+
+msgid "Copy path"
+msgstr "Copiar caminho"
+
+msgid "Delete media…"
+msgstr "Excluir mídia…"
+
+msgid "Confirm deletion"
+msgstr "Confirmar exclusão"
+
+msgid "Delete “{name}” from disk permanently?\n\nThis cannot be undone."
+msgstr "Excluir “{name}” do disco permanentemente?\n\nEsta ação não pode ser desfeita."
+
+msgid "Cancel"
+msgstr "Cancelar"
+
+msgid "Delete"
+msgstr "Excluir"
+
+msgid "active"
+msgstr "ativa"
+
+msgid "in use / unavailable"
+msgstr "em uso / indisponível"
+
+msgid "available"
+msgstr "disponível"
+
+msgid "Live View active (continuous preview)"
+msgstr "Live View ativo (preview contínuo)"
+
+msgid "camera connected (shutter closed)"
+msgstr "câmera conectada (obturador fechado)"
+
+msgid "connected (shutter closed)"
+msgstr "conectada (obturador fechado)"
+
+msgid "camera connected (shutter closed — start Live View for preview)"
+msgstr "câmera conectada (obturador fechado — inicie o Live View para preview)"
+
+msgid "standby — connect a camera for preview"
+msgstr "standby — conecte uma câmera para preview"
+
+msgid "webcam: off"
+msgstr "webcam: desligada"
+
+msgid "camera connected"
+msgstr "câmera conectada"
+
+msgid "webcam: {name}"
+msgstr "webcam: {name}"
+
+msgid "webcam active — {name}"
+msgstr "webcam ativa — {name}"
+
+msgid "capture in progress…"
+msgstr "captura em andamento…"
+
+msgid "photo saved: {p}"
+msgstr "foto salva: {p}"
+
+msgid "recording video: {path}"
+msgstr "gravando vídeo: {path}"
+
+msgid "Lenvix — error"
+msgstr "Lenvix — erro"
+
+# Core notifications & messages
+msgid "stop the recording before turning off Live View"
+msgstr "pare a gravação antes de desligar o Live View"
+
+msgid "no camera detected — plug in via USB and click Connect"
+msgstr "nenhuma câmera detectada — conecte via USB e clique em Conectar"
+
+msgid "recording aborted: camera disconnected"
+msgstr "gravação interrompida: câmera desconectada"
+
+msgid "config: camera not connected"
+msgstr "config: câmera não conectada"
+
+msgid "capture: camera not connected"
+msgstr "captura: câmera não conectada"
+
+msgid "button {name}: camera not connected"
+msgstr "botão {name}: câmera não conectada"
+
+msgid "connect a camera to record video"
+msgstr "conecte a câmera para gravar vídeo"
+
+msgid "Lenvix — Recording Started"
+msgstr "Lenvix — Gravação Iniciada"
+
+msgid "Saving as: {name}"
+msgstr "Salvando como: {name}"
+
+msgid "Lenvix — Recording Finished"
+msgstr "Lenvix — Gravação Concluída"
+
+msgid "recording aborted: camera disconnected (USB)"
+msgstr "gravação interrompida: câmera desconectada (USB)"
+
+msgid "Lenvix — Photo Captured"
+msgstr "Lenvix — Foto Capturada"
+
+msgid "recorder stdin closed"
+msgstr "stdin do gravador fechado"
+
+msgid "failed to start ffmpeg: {e}"
+msgstr "falha ao iniciar ffmpeg: {e}"
+
+msgid "failed to create recording file: {e}"
+msgstr "falha ao criar arquivo de gravação: {e}"
+
+msgid "failed to write frame: {e}"
+msgstr "falha ao gravar quadro: {e}"
+
+msgid "ffmpeg exited with error: {status}"
+msgstr "ffmpeg encerrou com erro: {status}"

@@ -6,6 +6,7 @@
 
 use crate::core::camera::{self, CameraEngine, EngineCmd, EngineEv};
 use crate::core::config::{CfgKind, CfgNode, CfgValue};
+use crate::core::i18n::{tr, trf};
 use crate::core::settings;
 use crossbeam_channel::{Receiver, Sender};
 use gtk4::prelude::*;
@@ -20,16 +21,16 @@ pub const APP_ID: &str = "br.lenvix";
 /// Apenas os marcados são exibidos no painel "Configurações" (ordem = ordem da UI).
 pub const CONTROLS_CATALOG: &[(&str, &str, &[&str])] = &[
     ("iso", "ISO", &["iso", "isospeed", "isospeedrate"]),
-    ("shutterspeed", "Velocidade (obturador)", &["shutterspeed", "shutterspeed2", "shutter"]),
-    ("aperture", "Abertura", &["aperture", "f-number"]),
-    ("whitebalance", "Balanço de branco", &["whitebalance"]),
-    ("exposurecompensation", "Compensação de exposição", &["exposurecompensation", "exposurecomp"]),
-    ("focusmode", "Modo de foco", &["focusmode", "focusmode2"]),
-    ("imageformat", "Formato de imagem", &["imageformat", "imagequality", "imagesize"]),
-    ("flashmode", "Modo de flash", &["flashmode", "flashmode2", "flash"]),
-    ("meteringmode", "Fotometria", &["meteringmode", "exposuremeteringmode", "aemode"]),
-    ("exposureprogrammode", "Modo de programa (P/A/S/M)", &["exposureprogrammode", "autoexposuremode"]),
-    ("capturetarget", "Destino de captura", &["capturetarget", "capturedestination"]),
+    ("shutterspeed", "Shutter speed", &["shutterspeed", "shutterspeed2", "shutter"]),
+    ("aperture", "Aperture", &["aperture", "f-number"]),
+    ("whitebalance", "White balance", &["whitebalance"]),
+    ("exposurecompensation", "Exposure compensation", &["exposurecompensation", "exposurecomp"]),
+    ("focusmode", "Focus mode", &["focusmode", "focusmode2"]),
+    ("imageformat", "Image format", &["imageformat", "imagequality", "imagesize"]),
+    ("flashmode", "Flash mode", &["flashmode", "flashmode2", "flash"]),
+    ("meteringmode", "Metering mode", &["meteringmode", "exposuremeteringmode", "aemode"]),
+    ("exposureprogrammode", "Program mode (P/A/S/M)", &["exposureprogrammode", "autoexposuremode"]),
+    ("capturetarget", "Capture target", &["capturetarget", "capturedestination"]),
 ];
 
 /// Ações que vêm da tray (thread separada) e precisam rodar na thread GTK
@@ -40,8 +41,11 @@ pub enum UiAction {
     Quit,
 }
 
+#[allow(dead_code)]
 struct Widgets {
     picture: gtk4::Picture,
+    preview_stack: gtk4::Stack,
+    btn_toggle_preview: gtk4::Button,
     lbl_model: gtk4::Label,
     lbl_status: gtk4::Label,
     lbl_webctr: gtk4::Label,
@@ -64,6 +68,9 @@ struct Widgets {
     audio_combo: gtk4::ComboBoxText,
     #[allow(deprecated)]
     vfmt_combo: gtk4::ComboBoxText,
+    #[allow(deprecated)]
+    language_combo: gtk4::ComboBoxText,
+    sw_auto_suspend: gtk4::Switch,
     lbl_scan_status: gtk4::Label,
     btn_liveview: gtk4::Button,
     #[allow(deprecated)]
@@ -116,20 +123,26 @@ pub fn activate(
         .build();
     header.set_title_widget(Some(&title_lbl));
 
+    let btn_toggle_preview = gtk4::Button::builder()
+        .icon_name("view-reveal-symbolic")
+        .tooltip_text(tr("Hide preview (save CPU and memory)"))
+        .build();
+    header.pack_end(&btn_toggle_preview);
+
     let btn_settings = gtk4::Button::builder()
         .icon_name("emblem-system-symbolic")
-        .tooltip_text("Configurações do aplicativo")
+        .tooltip_text(tr("App settings"))
         .build();
     header.pack_end(&btn_settings);
     window.set_titlebar(Some(&header));
 
     let lbl_model = gtk4::Label::builder()
-        .label("câmera não conectada")
+        .label(tr("camera not connected"))
         .halign(Align::Start)
         .ellipsize(gtk4::pango::EllipsizeMode::End)
         .build();
     let lbl_status = gtk4::Label::builder()
-        .label("iniciando…")
+        .label(tr("starting…"))
         .halign(Align::Start)
         .wrap(true)
         .wrap_mode(gtk4::pango::WrapMode::WordChar)
@@ -137,7 +150,7 @@ pub fn activate(
         .xalign(0.0)
         .build();
     let lbl_webctr = gtk4::Label::builder()
-        .label("webcam: iniciando…")
+        .label(tr("webcam: starting…"))
         .halign(Align::Start)
         .ellipsize(gtk4::pango::EllipsizeMode::End)
         .max_width_chars(32)
@@ -163,7 +176,7 @@ pub fn activate(
 
     let btn_settings_cam = gtk4::Button::builder()
         .icon_name("emblem-system-symbolic")
-        .tooltip_text("Configurações e seleção de câmera")
+        .tooltip_text(tr("Settings and camera selection"))
         .build();
 
     let cam_box = gtk4::Box::builder()
@@ -177,13 +190,13 @@ pub fn activate(
     #[allow(deprecated)]
     let cam_combo = gtk4::ComboBoxText::new();
     #[allow(deprecated)]
-    cam_combo.append_text("Nenhuma câmera detectada");
+    cam_combo.append_text(&tr("No camera detected"));
     #[allow(deprecated)]
     cam_combo.set_active(Some(0));
 
     // --- Janela de Configurações ---
     let settings_win = gtk4::Window::builder()
-        .title("Configurações — Lenvix")
+        .title(tr("Settings — Lenvix"))
         .transient_for(&window)
         .modal(true)
         .default_width(540)
@@ -201,13 +214,13 @@ pub fn activate(
         .build();
 
     let set_sec_cam = gtk4::Label::builder()
-        .label("<b>Seleção de Câmera</b>")
+        .label(tr("<b>Camera Selection</b>"))
         .use_markup(true)
         .halign(Align::Start)
         .build();
 
     let set_cam_desc = gtk4::Label::builder()
-        .label("Escolha qual câmera DSLR ou mirrorless conectada via USB deve ser utilizada:")
+        .label(tr("Choose which DSLR or mirrorless camera connected via USB should be used:"))
         .halign(Align::Start)
         .wrap(true)
         .css_classes(["dim-label"])
@@ -215,7 +228,7 @@ pub fn activate(
 
     let btn_refresh_cams = gtk4::Button::builder()
         .icon_name("view-refresh-symbolic")
-        .tooltip_text("Buscar câmeras conectadas agora")
+        .tooltip_text(tr("Search connected cameras now"))
         .build();
 
     let cam_row = gtk4::Box::builder()
@@ -227,7 +240,7 @@ pub fn activate(
     cam_row.append(&btn_refresh_cams);
 
     let lbl_scan_status = gtk4::Label::builder()
-        .label("Abra esta tela para detectar câmeras conectadas.")
+        .label(tr("Open this screen to detect connected cameras."))
         .halign(Align::Start)
         .wrap(true)
         .css_classes(["dim-label"])
@@ -237,13 +250,13 @@ pub fn activate(
 
     // --- Seção Gravação (Áudio e Formato) ---
     let set_sec_rec = gtk4::Label::builder()
-        .label("<b>Gravação de Vídeo &amp; Áudio</b>")
+        .label(tr("<b>Video Recording &amp; Audio</b>"))
         .use_markup(true)
         .halign(Align::Start)
         .build();
 
     let set_rec_desc = gtk4::Label::builder()
-        .label("Configure o microfone/dispositivo de áudio e o formato de arquivo para gravações:")
+        .label(tr("Configure the microphone/audio device and the file format for recordings:"))
         .halign(Align::Start)
         .wrap(true)
         .css_classes(["dim-label"])
@@ -252,9 +265,9 @@ pub fn activate(
     #[allow(deprecated)]
     let audio_combo = gtk4::ComboBoxText::new();
     #[allow(deprecated)]
-    audio_combo.append_text("Padrão do Sistema (default)");
+    audio_combo.append_text(&tr("System default"));
     #[allow(deprecated)]
-    audio_combo.append_text("Sem áudio (mudo)");
+    audio_combo.append_text(&tr("No audio (muted)"));
     #[allow(deprecated)]
     audio_combo.set_active(Some(0));
 
@@ -263,7 +276,7 @@ pub fn activate(
         .spacing(8)
         .build();
     let lbl_audio = gtk4::Label::builder()
-        .label("Entrada de áudio:")
+        .label(tr("Audio input:"))
         .halign(Align::Start)
         .build();
     audio_combo.set_hexpand(true);
@@ -290,7 +303,7 @@ pub fn activate(
         .spacing(8)
         .build();
     let lbl_vfmt = gtk4::Label::builder()
-        .label("Formato do vídeo:")
+        .label(tr("Video format:"))
         .halign(Align::Start)
         .build();
     vfmt_combo.set_hexpand(true);
@@ -301,7 +314,7 @@ pub fn activate(
 
     // --- Seção: Controles da câmera exibidos no painel ---
     let set_sec_ctrl = gtk4::Label::builder()
-        .label("<b>Controles da Câmera</b>")
+        .label(tr("<b>Camera Controls</b>"))
         .use_markup(true)
         .halign(Align::Start)
         .build();
@@ -334,10 +347,54 @@ pub fn activate(
     let set_sep3 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
 
     let set_sec_app = gtk4::Label::builder()
-        .label("<b>Aplicativo</b>")
+        .label(format!("<b>{}</b>", tr("Application & Performance")))
         .use_markup(true)
         .halign(Align::Start)
         .build();
+
+    let set_app_desc = gtk4::Label::builder()
+        .label(tr("Configure general options, language and performance optimizations:"))
+        .halign(Align::Start)
+        .wrap(true)
+        .css_classes(["dim-label"])
+        .build();
+
+    // Idioma da UI
+    let lang_row = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .spacing(6)
+        .build();
+    let lbl_lang = gtk4::Label::new(Some(&tr("Language:")));
+    lbl_lang.set_halign(Align::Start);
+    lbl_lang.set_hexpand(true);
+    #[allow(deprecated)]
+    let language_combo = gtk4::ComboBoxText::new();
+    #[allow(deprecated)]
+    {
+        language_combo.append(Some(""), &tr("System (default)"));
+        language_combo.append(Some("pt_BR"), "Português (Brasil)");
+        language_combo.append(Some("en"), "English");
+        language_combo.set_active_id(Some(crate::core::i18n::lang()));
+    }
+    lang_row.append(&lbl_lang);
+    lang_row.append(&language_combo);
+
+    // Otimização de Performance: Auto-suspensão do preview
+    let suspend_row = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .spacing(6)
+        .build();
+    let sw_auto_suspend = gtk4::Switch::builder()
+        .halign(Align::End)
+        .valign(Align::Center)
+        .build();
+    let lbl_suspend = gtk4::Label::new(Some(&tr("Auto-suspend preview when minimized or inactive")));
+    lbl_suspend.set_halign(Align::Start);
+    lbl_suspend.set_hexpand(true);
+    lbl_suspend.set_tooltip_text(Some(&tr("Saves CPU and RAM by pausing preview rendering when the window loses focus.")));
+    sw_auto_suspend.set_tooltip_text(Some(&tr("Saves CPU and RAM by pausing preview rendering when the window loses focus.")));
+    suspend_row.append(&lbl_suspend);
+    suspend_row.append(&sw_auto_suspend);
 
     let lbl_ver = gtk4::Label::builder()
         .label(format!("Lenvix v{}", env!("CARGO_PKG_VERSION")))
@@ -346,7 +403,7 @@ pub fn activate(
         .build();
 
     let btn_close_settings = gtk4::Button::builder()
-        .label("Fechar")
+        .label(tr("Close"))
         .halign(Align::End)
         .build();
 
@@ -365,6 +422,9 @@ pub fn activate(
     set_box.append(&ctrl_grid);
     set_box.append(&set_sep3);
     set_box.append(&set_sec_app);
+    set_box.append(&set_app_desc);
+    set_box.append(&lang_row);
+    set_box.append(&suspend_row);
     set_box.append(&lbl_ver);
     set_box.append(&btn_close_settings);
 
@@ -374,7 +434,7 @@ pub fn activate(
     set_scroll.set_child(Some(&set_scroll_child));
     settings_win.set_child(Some(&set_scroll));
 
-    let btn_connect = gtk4::Button::with_label("Conectar câmera");
+    let btn_connect = gtk4::Button::with_label(&tr("Connect camera"));
     let btn_liveview = gtk4::Button::with_label("Live View");
     btn_liveview.set_sensitive(false);
 
@@ -386,12 +446,12 @@ pub fn activate(
     btn_cam_row.append(&btn_connect);
     btn_cam_row.append(&btn_liveview);
 
-    let btn_capture = gtk4::Button::with_label("Foto (full-res)");
-    btn_capture.set_tooltip_text(Some("captura no cartão e baixa para a sessão local"));
+    let btn_capture = gtk4::Button::with_label(&tr("Photo (full-res)"));
+    btn_capture.set_tooltip_text(Some(&tr("captures to the card and downloads to the local session")));
     btn_capture.set_sensitive(false);
 
-    let btn_record = gtk4::Button::with_label("Gravar vídeo");
-    btn_record.set_tooltip_text(Some("Gravar stream de vídeo ao vivo (MP4/H.264)"));
+    let btn_record = gtk4::Button::with_label(&tr("Record video"));
+    btn_record.set_tooltip_text(Some(&tr("record the live stream to a video file")));
     btn_record.set_sensitive(false);
 
     let btn_cap_row = gtk4::Box::builder()
@@ -410,7 +470,7 @@ pub fn activate(
         .orientation(gtk4::Orientation::Horizontal)
         .spacing(6)
         .build();
-    let lbl_auto = gtk4::Label::new(Some("Auto-conectar USB"));
+    let lbl_auto = gtk4::Label::new(Some(&tr("Auto-connect USB")));
     lbl_auto.set_halign(Align::Start);
     lbl_auto.set_hexpand(true);
     auto_row.append(&lbl_auto);
@@ -418,7 +478,7 @@ pub fn activate(
 
     // --- Seção: Webcam Virtual ---
     let sec_web_lbl = gtk4::Label::builder()
-        .label("<b>Webcam Virtual</b>")
+        .label(tr("<b>Virtual Webcam</b>"))
         .use_markup(true)
         .halign(Align::Start)
         .build();
@@ -429,7 +489,7 @@ pub fn activate(
         .hexpand(false)
         .build();
     let lbl_webcam = gtk4::Label::builder()
-        .label("Webcam virtual")
+        .label(tr("Virtual webcam"))
         .halign(Align::Start)
         .hexpand(true)
         .build();
@@ -449,7 +509,7 @@ pub fn activate(
 
     let btn_add_dev = gtk4::Button::builder()
         .icon_name("list-add-symbolic")
-        .tooltip_text("Criar nova saída virtual (/dev/videoN)")
+        .tooltip_text(tr("Create new virtual output (/dev/videoN)"))
         .build();
 
     let dev_box = gtk4::Box::builder()
@@ -459,7 +519,7 @@ pub fn activate(
     dev_combo.set_hexpand(true);
     dev_box.append(&dev_combo);
     dev_box.append(&btn_add_dev);
-    let dev_row = ui_row("Dispositivo", &dev_box);
+    let dev_row = ui_row(&tr("Device"), &dev_box);
 
     #[allow(deprecated)]
     let out_combo = gtk4::ComboBoxText::new();
@@ -479,15 +539,15 @@ pub fn activate(
     }
     #[allow(deprecated)]
     out_combo.set_active(Some(2));
-    let out_row = ui_row("Resolução", &out_combo);
+    let out_row = ui_row(&tr("Resolution"), &out_combo);
 
     let spinner = gtk4::SpinButton::with_range(5.0, 60.0, 1.0);
     spinner.set_value(30.0);
-    let fps_row = ui_row("FPS alvo", &spinner);
+    let fps_row = ui_row(&tr("Target FPS"), &spinner);
 
     // --- Seção: Ajustes de Imagem ---
     let sec_adj_lbl = gtk4::Label::builder()
-        .label("<b>Ajustes de Imagem</b>")
+        .label(tr("<b>Image Adjustments</b>"))
         .use_markup(true)
         .halign(Align::Start)
         .build();
@@ -496,11 +556,11 @@ pub fn activate(
         .halign(Align::End)
         .valign(Align::Center)
         .hexpand(false)
-        .tooltip_text("Espelha horizontalmente apenas o vídeo da câmera (não afeta a imagem de standby)")
+        .tooltip_text(tr("Mirror the camera video horizontally (standby image is not affected)"))
         .build();
     let lbl_mirror_row = gtk4::Label::builder()
-        .label("Espelhar vídeo da câmera")
-        .tooltip_text("Espelha horizontalmente apenas o vídeo da câmera (não afeta a imagem de standby)")
+        .label(tr("Mirror camera video"))
+        .tooltip_text(tr("Mirror the camera video horizontally (standby image is not affected)"))
         .halign(Align::Start)
         .hexpand(true)
         .build();
@@ -693,7 +753,7 @@ pub fn activate(
         let last_tree_sync = last_tree.clone();
         let cam_on_checks = cam_on.clone();
         Rc::new(move || {
-            lbl_scan_status.set_text("Buscando câmeras…");
+            lbl_scan_status.set_text(&tr("Searching for cameras…"));
             let _ = cmd_tx.send(EngineCmd::SetScanning(true));
             let _ = cmd_tx.send(EngineCmd::ScanCameras);
 
@@ -718,7 +778,7 @@ pub fn activate(
             #[allow(deprecated)]
             audio_combo_setup.remove_all();
             #[allow(deprecated)]
-            audio_combo_setup.append_text("Padrão do Sistema (default)");
+            audio_combo_setup.append_text(&tr("System default"));
             let mut ids = vec!["default".to_string()];
             for src in &sources {
                 #[allow(deprecated)]
@@ -726,7 +786,7 @@ pub fn activate(
                 ids.push(src.id.clone());
             }
             #[allow(deprecated)]
-            audio_combo_setup.append_text("Sem áudio (mudo)");
+            audio_combo_setup.append_text(&tr("No audio (muted)"));
             ids.push("none".to_string());
             *audio_sources_combo.borrow_mut() = ids;
 
@@ -755,7 +815,7 @@ pub fn activate(
     let cmd_tx_ref = engine.borrow().cmd_tx.clone();
     let lbl_scan_status_ref = lbl_scan_status.clone();
     btn_refresh_cams.connect_clicked(move |_| {
-        lbl_scan_status_ref.set_text("Atualizando lista de câmeras…");
+        lbl_scan_status_ref.set_text(&tr("Refreshing camera list…"));
         let _ = cmd_tx_ref.send(EngineCmd::ScanCameras);
     });
 
@@ -879,30 +939,219 @@ pub fn activate(
     }
 
     // ------- painel de preview (FR-05) -------
-    let picture = gtk4::Picture::builder().content_fit(gtk4::ContentFit::ScaleDown).build();    let lbl_fps = gtk4::Label::builder()
+    let picture = gtk4::Picture::builder().content_fit(gtk4::ContentFit::ScaleDown).build();
+    let lbl_fps = gtk4::Label::builder()
         .label("fps: –")
         .halign(Align::End)
         .css_classes(["dim-label"])
         .build();
+
+    let preview_stack = gtk4::Stack::new();
+    preview_stack.set_transition_type(gtk4::StackTransitionType::Crossfade);
+    preview_stack.add_named(&picture, Some("preview"));
+
+    let suspend_box = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Vertical)
+        .spacing(12)
+        .halign(Align::Center)
+        .valign(Align::Center)
+        .build();
+
+    let suspend_icon = gtk4::Image::builder()
+        .icon_name("view-conceal-symbolic")
+        .pixel_size(48)
+        .css_classes(["dim-label"])
+        .build();
+
+    let suspend_title = gtk4::Label::builder()
+        .label(format!("<b>{}</b>", tr("Preview Suspended")))
+        .use_markup(true)
+        .build();
+
+    let suspend_desc = gtk4::Label::builder()
+        .label(tr("Disabled to save memory and CPU."))
+        .css_classes(["dim-label"])
+        .halign(Align::Center)
+        .build();
+
+    let btn_enable_preview = gtk4::Button::builder()
+        .label(tr("Enable Preview"))
+        .css_classes(["suggested-action"])
+        .halign(Align::Center)
+        .build();
+
+    suspend_box.append(&suspend_icon);
+    suspend_box.append(&suspend_title);
+    suspend_box.append(&suspend_desc);
+    suspend_box.append(&btn_enable_preview);
+
+    preview_stack.add_named(&suspend_box, Some("suspended"));
+    preview_stack.set_visible_child_name("preview");
+
     let frame = gtk4::Frame::new(None);
-    frame.set_child(Some(&picture));
+    frame.set_child(Some(&preview_stack));
     frame.set_hexpand(true);
     frame.set_vexpand(true);
     frame.set_size_request(400, 300);
 
-    // menu de contexto do preview (clique direito): captura, live view, pasta
+    let user_hidden: Rc<std::cell::Cell<bool>> = Rc::new(std::cell::Cell::new(false));
+    let auto_suspended: Rc<std::cell::Cell<bool>> = Rc::new(std::cell::Cell::new(false));
+    let auto_suspend_enabled: Rc<std::cell::Cell<bool>> =
+        Rc::new(std::cell::Cell::new(crate::core::settings::load().auto_suspend_preview));
+    let is_preview_active: Rc<std::cell::Cell<bool>> = Rc::new(std::cell::Cell::new(true));
+
+    let update_preview_state = {
+        let preview_stack = preview_stack.clone();
+        let picture = picture.clone();
+        let btn_toggle_preview = btn_toggle_preview.clone();
+        let lbl_fps = lbl_fps.clone();
+        let cmd_tx = engine.borrow().cmd_tx.clone();
+        let user_hidden = user_hidden.clone();
+        let auto_suspended = auto_suspended.clone();
+        let is_preview_active = is_preview_active.clone();
+
+        move || {
+            let should_hide = user_hidden.get() || auto_suspended.get();
+            let currently_active = is_preview_active.get();
+
+            if should_hide && currently_active {
+                is_preview_active.set(false);
+                preview_stack.set_visible_child_name("suspended");
+                picture.set_paintable(None::<&gdk::Paintable>); // Libera texturas GPU e RAM imediatamente
+                btn_toggle_preview.set_icon_name("view-conceal-symbolic");
+                btn_toggle_preview.set_tooltip_text(Some(&tr("Show preview")));
+                lbl_fps.set_text(&tr("preview suspended"));
+                let _ = cmd_tx.send(EngineCmd::SetGuiPreviewActive(false));
+            } else if !should_hide && !currently_active {
+                is_preview_active.set(true);
+                preview_stack.set_visible_child_name("preview");
+                btn_toggle_preview.set_icon_name("view-reveal-symbolic");
+                btn_toggle_preview.set_tooltip_text(Some(&tr("Hide preview (save CPU and memory)")));
+                let _ = cmd_tx.send(EngineCmd::SetGuiPreviewActive(true));
+            }
+        }
+    };
+
+    {
+        let user_hidden = user_hidden.clone();
+        let auto_suspended = auto_suspended.clone();
+        let update_preview = update_preview_state.clone();
+        btn_enable_preview.connect_clicked(move |_| {
+            user_hidden.set(false);
+            auto_suspended.set(false);
+            update_preview();
+        });
+    }
+
+    {
+        let user_hidden = user_hidden.clone();
+        let update_preview = update_preview_state.clone();
+        btn_toggle_preview.connect_clicked(move |_| {
+            user_hidden.set(!user_hidden.get());
+            update_preview();
+        });
+    }
+
+    let check_window_state = {
+        let window = window.clone();
+        let settings_win = settings_win.clone();
+        let auto_suspend_enabled = auto_suspend_enabled.clone();
+        let auto_suspended = auto_suspended.clone();
+        let update_preview = update_preview_state.clone();
+
+        move || {
+            if !auto_suspend_enabled.get() {
+                if auto_suspended.get() {
+                    auto_suspended.set(false);
+                    update_preview();
+                }
+                return;
+            }
+
+            let is_visible = window.is_visible();
+            let is_suspended = window.is_suspended();
+            let is_active = window.is_active() || settings_win.is_active();
+
+            let should_auto_suspend = !is_visible || is_suspended || !is_active;
+            if auto_suspended.get() != should_auto_suspend {
+                auto_suspended.set(should_auto_suspend);
+                update_preview();
+            }
+        }
+    };
+
+    {
+        let check_state = check_window_state.clone();
+        window.connect_is_active_notify(move |_| {
+            check_state();
+        });
+    }
+    {
+        let check_state = check_window_state.clone();
+        window.connect_visible_notify(move |_| {
+            check_state();
+        });
+    }
+    {
+        let check_state = check_window_state.clone();
+        window.connect_suspended_notify(move |_| {
+            check_state();
+        });
+    }
+    {
+        let check_state = check_window_state.clone();
+        settings_win.connect_is_active_notify(move |_| {
+            check_state();
+        });
+    }
+
+    {
+        let cmd_tx = engine.borrow().cmd_tx.clone();
+        let suppress_lang = suppress.clone();
+        #[allow(deprecated)]
+        language_combo.connect_changed(move |c| {
+            if suppress_lang.get() {
+                return;
+            }
+            if let Some(id) = c.active_id() {
+                let _ = cmd_tx.send(EngineCmd::SetLanguage(id.to_string()));
+            }
+        });
+    }
+
+    {
+        let cmd_tx = engine.borrow().cmd_tx.clone();
+        let auto_suspend_enabled = auto_suspend_enabled.clone();
+        let check_state = check_window_state.clone();
+        let suppress_susp = suppress.clone();
+        sw_auto_suspend.connect_state_set(move |_, state| {
+            if suppress_susp.get() {
+                return glib::Propagation::Proceed;
+            }
+            auto_suspend_enabled.set(state);
+            let _ = cmd_tx.send(EngineCmd::SetAutoSuspendPreview(state));
+            check_state();
+            glib::Propagation::Proceed
+        });
+    }
+
+    // menu de contexto do preview (clique direito): captura, live view, pasta, alternar preview
     let frame_gc = gtk4::GestureClick::new();
     frame_gc.set_button(3);
     let cmd_tx_ctx = engine.borrow().cmd_tx.clone();
     let live_on_ctx = live_on.clone();
     let cam_on_ctx = cam_on.clone();
     let frame_for_menu = frame.clone();
+    let user_hidden_ctx = user_hidden.clone();
+    let auto_suspended_ctx = auto_suspended.clone();
+    let is_preview_active_ctx = is_preview_active.clone();
+    let update_preview_ctx = update_preview_state.clone();
     frame_gc.connect_pressed(move |g, _n, x, y| {
         g.set_state(gtk4::EventSequenceState::Claimed);
         let mut items: Vec<(String, Box<dyn FnOnce()>)> = Vec::new();
         if cam_on_ctx.get() {
             items.push((
-                "Capturar foto (full-res)".into(),
+                tr("Capture photo (full-res)"),
                 {
                     let cmd_tx = cmd_tx_ctx.clone();
                     Box::new(move || { let _ = cmd_tx.send(EngineCmd::Capture); })
@@ -910,7 +1159,7 @@ pub fn activate(
             ));
             if live_on_ctx.get() {
                 items.push((
-                    "Parar Live View".into(),
+                    tr("Stop Live View"),
                     {
                         let cmd_tx = cmd_tx_ctx.clone();
                         Box::new(move || { let _ = cmd_tx.send(EngineCmd::SetLiveView(false)); })
@@ -918,7 +1167,7 @@ pub fn activate(
                 ));
             } else {
                 items.push((
-                    "Iniciar Live View".into(),
+                    tr("Start Live View"),
                     {
                         let cmd_tx = cmd_tx_ctx.clone();
                         Box::new(move || { let _ = cmd_tx.send(EngineCmd::SetLiveView(true)); })
@@ -926,8 +1175,31 @@ pub fn activate(
                 ));
             }
         }
+        if is_preview_active_ctx.get() {
+            let user_hidden = user_hidden_ctx.clone();
+            let update_preview = update_preview_ctx.clone();
+            items.push((
+                tr("Disable preview (save memory/CPU)"),
+                Box::new(move || {
+                    user_hidden.set(true);
+                    update_preview();
+                }),
+            ));
+        } else {
+            let user_hidden = user_hidden_ctx.clone();
+            let auto_suspended = auto_suspended_ctx.clone();
+            let update_preview = update_preview_ctx.clone();
+            items.push((
+                tr("Enable preview"),
+                Box::new(move || {
+                    user_hidden.set(false);
+                    auto_suspended.set(false);
+                    update_preview();
+                }),
+            ));
+        }
         items.push((
-            "Abrir pasta da sessão".into(),
+            tr("Open session folder"),
             Box::new(move || {
                 let dir = camera::session_dir();
                 let _ = std::process::Command::new("xdg-open").arg(&dir).spawn();
@@ -947,7 +1219,7 @@ pub fn activate(
     config_scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
     config_scroll.set_child(Some(&config_box));
     config_scroll.set_vexpand(true);
-    let right_frame = gtk4::Frame::new(Some("Configurações"));
+    let right_frame = gtk4::Frame::new(Some(&tr("Settings")));
     right_frame.set_child(Some(&config_scroll));
     right_frame.set_size_request(340, -1);
     right_frame.set_hexpand(false);
@@ -970,20 +1242,22 @@ pub fn activate(
         .halign(Align::Start)
         .css_classes(["dim-label"])
         .build();
-    let btn_open_dir = gtk4::Button::with_label("Abrir pasta");
+    let btn_open_dir = gtk4::Button::with_label(&tr("Open folder"));
     let gal_head = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
     gal_head.append(&lbl_session);
     gal_head.append(&btn_open_dir);
     let gal_inner = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
     gal_inner.append(&gal_head);
     gal_inner.append(&gal_scroll);
-    let gal_frame = gtk4::Frame::new(Some("Sessão"));
+    let gal_frame = gtk4::Frame::new(Some(&tr("Session")));
     gal_scroll.set_child(Some(&gal_box));
     gal_frame.set_child(Some(&gal_inner));
     root.append(&gal_frame);
 
     let w = Widgets {
         picture,
+        preview_stack,
+        btn_toggle_preview,
         lbl_model,
         lbl_status,
         lbl_webctr,
@@ -1002,6 +1276,8 @@ pub fn activate(
         cam_combo,
         audio_combo,
         vfmt_combo,
+        language_combo,
+        sw_auto_suspend,
         lbl_scan_status,
         btn_liveview,
         dev_combo,
@@ -1026,7 +1302,7 @@ pub fn activate(
 
     // sessão: caminho mostrado desde já + abrir pasta; galeria carregada no startup
     let dir = camera::session_dir();
-    w.lbl_session.set_text(&format!("fotos salvas em: {}", dir.display()));
+    w.lbl_session.set_text(&trf("photos saved in: {dir}", &[("dir", dir.display().to_string())]));
     let dopen = dir.clone();
     btn_open_dir.connect_clicked(move |_| {
         let _ = std::process::Command::new("xdg-open").arg(&dopen).spawn();
@@ -1034,7 +1310,7 @@ pub fn activate(
     refresh_gallery(&w);
 
     // loop de eventos (única fonte de verdade: core-camera + tray)
-    poll_events(app, &window, engine, action_rx, w, cam_on, live_on, is_recording, cameras_data, suppress, visible_state, last_tree);
+    poll_events(app, &window, engine, action_rx, w, cam_on, live_on, is_recording, cameras_data, suppress, visible_state, last_tree, auto_suspend_enabled);
 }
 
 // ------------ painel dinâmico de configurações -------------------------------
@@ -1178,12 +1454,12 @@ fn rebuild_ctrl_checks(
                 .find(|(k, _, _)| *k == key)
                 .map(|(_, _, a)| a.join(", "))
                 .unwrap_or_default();
-            format!("Aparece no painel quando a câmera expõe: {aliases}")
+            trf("Shown on the panel when the camera exposes: {aliases}", &[("aliases", aliases)])
         } else {
-            "Controle exposto pela câmera conectada".to_string()
+            tr("Control exposed by the connected camera")
         };
         let cb = gtk4::CheckButton::builder()
-            .label(label)
+            .label(tr(label))
             .tooltip_text(tip)
             .build();
         grid.attach(&cb, (i % 2) as i32, (i / 2) as i32, 1, 1);
@@ -1281,8 +1557,8 @@ fn confirm_delete_media(
         .transient_for(parent)
         .modal(true)
         .buttons(ButtonsType::YesNo)
-        .text("Excluir mídia?")
-        .secondary_text(format!("Excluir “{file_name}” do disco permanentemente?\n\nNão é possível desfazer."))
+        .text(tr("Delete media?"))
+        .secondary_text(trf("Delete “{name}” from disk permanently?\n\nThis cannot be undone.", &[("name", file_name)]))
         .build();
     let act = Rc::new(RefCell::new(Some(after_delete)));
     let act_resp = act.clone();
@@ -1504,7 +1780,7 @@ fn refresh_gallery_box(gal_box: &gtk4::Box, parent: &gtk4::Window) {
         .collect();
     files.sort_by_key(|fa| std::cmp::Reverse(fa.1));
     if files.is_empty() {
-        let l = gtk4::Label::builder().label("(sem fotos ou vídeos)".to_string()).build();
+        let l = gtk4::Label::builder().label(tr("(no photos or videos)")).build();
         l.set_sensitive(false);
         gal_box.append(&l);
     }
@@ -1523,12 +1799,14 @@ fn refresh_gallery_box(gal_box: &gtk4::Box, parent: &gtk4::Window) {
         }
         btn.set_child(Some(&img));
         let size = p.metadata().map(|m| m.len()).unwrap_or(0);
-        let tag = if is_video { " [Vídeo]" } else { "" };
+        let tag_text = tr(" [video]");
+        let tag = if is_video { tag_text.as_str() } else { "" };
         btn.set_tooltip_text(Some(&format!(
-            "{}{} ({:.1} MB) — clique abre · clique direito exclui",
+            "{}{} ({:.1} MB) — {}",
             p.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(),
             tag,
-            size as f64 / 1e6
+            size as f64 / 1e6,
+            tr("left click opens · right click for options"),
         )));
 
         // clique esquerdo: abrir o arquivo
@@ -1549,7 +1827,7 @@ fn refresh_gallery_box(gal_box: &gtk4::Box, parent: &gtk4::Window) {
             let dir_path = path.parent().map(|d| d.to_path_buf()).unwrap_or_else(camera::session_dir);
             let items: Vec<(String, Box<dyn FnOnce()>)> = vec![
                 (
-                    "Abrir arquivo".into(),
+                    tr("Open file"),
                     {
                         let path = path.clone();
                         Box::new(move || {
@@ -1567,7 +1845,7 @@ fn refresh_gallery_box(gal_box: &gtk4::Box, parent: &gtk4::Window) {
                     },
                 ),
                 (
-                    "Excluir mídia…".into(),
+                    tr("Delete media…"),
                     {
                         let path = path.clone();
                         let gal_box_c = gal_box_c.clone();
@@ -1605,6 +1883,7 @@ fn poll_events(
     suppress: Rc<std::cell::Cell<bool>>,
     visible_state: Rc<RefCell<Vec<String>>>,
     last_tree: Rc<RefCell<Vec<CfgNode>>>,
+    auto_suspend_enabled: Rc<std::cell::Cell<bool>>,
 ) {
     let app = app.clone();
     let engine = engine.clone();
@@ -1646,14 +1925,14 @@ fn poll_events(
                     w.cam_combo.remove_all();
                     if cameras.is_empty() {
                         #[allow(deprecated)]
-                        w.cam_combo.append_text("Nenhuma câmera detectada");
+                        w.cam_combo.append_text(&tr("No camera detected"));
                         #[allow(deprecated)]
                         w.cam_combo.set_active(Some(0));
-                        w.lbl_scan_status.set_text("Nenhuma câmera detectada via USB.");
+                        w.lbl_scan_status.set_text(&tr("No cameras detected via USB."));
                         w.btn_connect.set_sensitive(false);
-                        w.lbl_model.set_text("câmera não conectada");
+                        w.lbl_model.set_text(&tr("camera not connected"));
                         if !cam_on.get() {
-                            w.lbl_status.set_text("conecte a câmera via USB");
+                            w.lbl_status.set_text(&tr("no camera — plug it in via USB"));
                         }
                     } else {
                         let mut active_idx = None;
@@ -1690,11 +1969,11 @@ fn poll_events(
                     let mut active_found = false;
                     for (i, dev) in devices.iter().enumerate() {
                         let status_str = if dev.nr == active {
-                            "ativa"
+                            tr("active")
                         } else if dev.in_use {
-                            "ocupado / indisponível"
+                            tr("in use / unavailable")
                         } else {
-                            "disponível"
+                            tr("available")
                         };
                         let label = format!("/dev/video{} ({} — {})", dev.nr, dev.card, status_str);
                         #[allow(deprecated)]
@@ -1719,22 +1998,22 @@ fn poll_events(
                 EngineEv::LiveViewStatus(active) => {
                     live_on.set(active);
                     if active {
-                        w.btn_liveview.set_label("Parar Live View");
+                        w.btn_liveview.set_label(&tr("Stop Live View"));
                         w.btn_liveview.add_css_class("destructive-action");
                         w.btn_liveview.remove_css_class("suggested-action");
-                        w.lbl_status.set_text("Live View ativo (preview contínuo)");
+                        w.lbl_status.set_text(&tr("Live View active (continuous preview)"));
                     } else {
-                        w.btn_liveview.set_label("Iniciar Live View");
+                        w.btn_liveview.set_label(&tr("Start Live View"));
                         w.btn_liveview.add_css_class("suggested-action");
                         w.btn_liveview.remove_css_class("destructive-action");
                         if cam_on.get() {
-                            w.lbl_status.set_text("câmera conectada (obturador fechado)");
+                            w.lbl_status.set_text(&tr("camera connected (shutter closed)"));
                         }
                     }
                 }
                 EngineEv::CameraOpened { model } => {
                     w.lbl_model.set_text(&model);
-                    w.lbl_status.set_text("conectada (obturador fechado)");
+                    w.lbl_status.set_text(&tr("connected (shutter closed)"));
                 }
                 EngineEv::Frame { w: fw, h: fh, rgba, measured_fps } => {
                     let stride = (fw * 4) as usize;
@@ -1749,7 +2028,10 @@ fn poll_events(
                     w.picture.set_paintable(Some(&tex));
                     w.lbl_fps.set_text(&format!("fps: {measured_fps:.1} — {fw}×{fh}"));
                 }
-                EngineEv::AppState { fps, webcam, mirror, zoom, pan_x, pan_y, out, autoconnect, video_device: _, liveview, audio_source, video_format, visible_controls } => {
+                EngineEv::StreamStats { measured_fps } => {
+                    w.lbl_fps.set_text(&format!("fps: {measured_fps:.1} — {}", tr("preview suspended")));
+                }
+                EngineEv::AppState { fps, webcam, mirror, zoom, pan_x, pan_y, out, autoconnect, video_device: _, liveview, audio_source, video_format, visible_controls, language, auto_suspend_preview } => {
                     suppress.set(true);
                     // lista salva como está: contém chaves do catálogo curado
                     // e/ou chaves dinâmicas (nomes reais da câmera)
@@ -1765,6 +2047,10 @@ fn poll_events(
                     w.zoom_scale.set_value(f64::from(zoom));
                     w.panx_scale.set_value(f64::from(pan_x));
                     w.pany_scale.set_value(f64::from(pan_y));
+                    w.sw_auto_suspend.set_active(auto_suspend_preview);
+                    auto_suspend_enabled.set(auto_suspend_preview);
+                    #[allow(deprecated)]
+                    w.language_combo.set_active_id(Some(&language));
                     #[allow(deprecated)]
                     w.out_combo.set_active(match out {
                         Some((1280, 720)) => Some(1),
@@ -1797,22 +2083,23 @@ fn poll_events(
                 }
                 EngineEv::Connected(on) => {
                     cam_on.set(on);
-                    w.btn_connect.set_label(if on { "Desconectar câmera" } else { "Conectar câmera" });
+                    let conn_lbl = if on { tr("Disconnect camera") } else { tr("Connect camera") };
+                    w.btn_connect.set_label(&conn_lbl);
                     w.btn_liveview.set_sensitive(on);
                     w.btn_capture.set_sensitive(on);
                     w.btn_record.set_sensitive(on);
                     if on {
-                        w.lbl_status.set_text("câmera conectada (obturador em repouso — inicie o Live View para preview)");
+                        w.lbl_status.set_text(&tr("camera connected (shutter closed — start Live View for preview)"));
                     } else {
                         live_on.set(false);
                         w.btn_liveview.set_label("Live View");
                         w.btn_liveview.remove_css_class("destructive-action");
                         w.btn_liveview.remove_css_class("suggested-action");
-                        w.btn_record.set_label("Gravar vídeo");
+                        w.btn_record.set_label(&tr("Record video"));
                         w.btn_record.remove_css_class("destructive-action");
                         is_recording.set(false);
-                        w.lbl_status.set_text("standby — conecte a câmera para preview");
-                        w.lbl_model.set_text("câmera não conectada");
+                        w.lbl_status.set_text(&tr("standby — connect a camera for preview"));
+                        w.lbl_model.set_text(&tr("camera not connected"));
                     }
                 }
                 EngineEv::PreviewLost(e) => {
@@ -1822,14 +2109,14 @@ fn poll_events(
                     w.sw_webcam.set_active(on);
                     match (&path, &error) {
                         (Some(_), None) => {
-                            let nome = card.clone().unwrap_or_else(|| "ativa".to_string());
-                            w.lbl_webctr.set_text(&format!("webcam: {nome}"));
-                            w.lbl_status.set_text(&format!("webcam ativa — {nome}"));
+                            let nome = card.clone().unwrap_or_else(|| tr("active"));
+                            w.lbl_webctr.set_text(&trf("webcam: {name}", &[("name", nome.clone())]));
+                            w.lbl_status.set_text(&trf("webcam active — {name}", &[("name", nome)]));
                         }
                         (_, Some(e)) => w.lbl_status.set_markup(&format!("<b>{e}</b>")),
                         (None, None) => {
-                            w.lbl_webctr.set_text("webcam: desligada");
-                            w.lbl_status.set_text("câmera conectada");
+                            w.lbl_webctr.set_text(&tr("webcam: off"));
+                            w.lbl_status.set_text(&tr("camera connected"));
                         }
                     }
                 }
@@ -1854,13 +2141,13 @@ fn poll_events(
                 }
                 EngineEv::CaptureBusy => {
                     w.btn_capture.set_sensitive(false);
-                    w.lbl_status.set_text("captura em execução…");
+                    w.lbl_status.set_text(&tr("capture in progress…"));
                 }
                 EngineEv::CaptureDone { path, error } => {
                     w.btn_capture.set_sensitive(true);
                     match (path, error) {
                         (Some(p), _) => {
-                            w.lbl_status.set_text(&format!("foto salva: {p}"));
+                            w.lbl_status.set_text(&trf("photo saved: {p}", &[("p", p)]));
                             refresh_gallery(&w);
                         }
                         (None, Some(e)) => {
@@ -1873,22 +2160,32 @@ fn poll_events(
                     is_recording.set(true);
                     w.btn_record.set_label("⏹ Parar (00:00)");
                     w.btn_record.add_css_class("destructive-action");
-                    w.lbl_status.set_text(&format!("gravando vídeo: {path}"));
+                    w.lbl_status.set_text(&trf("recording video: {path}", &[("path", path)]));
                 }
                 EngineEv::RecordingProgress { elapsed_secs, frames: _ } => {
                     let mins = elapsed_secs / 60;
                     let secs = elapsed_secs % 60;
                     w.btn_record.set_label(&format!("⏹ Parar ({mins:02}:{secs:02})"));
-                    w.lbl_status.set_text(&format!("gravando vídeo… ({mins:02}:{secs:02})"));
+                    w.lbl_status.set_text(&trf(
+                        "recording video… ({mm}:{ss})",
+                        &[("mm", format!("{mins:02}")), ("ss", format!("{secs:02}"))],
+                    ));
                 }
                 EngineEv::RecordingDone { path, duration_secs, size_bytes, error } => {
                     is_recording.set(false);
-                    w.btn_record.set_label("Gravar vídeo");
+                    w.btn_record.set_label(&tr("Record video"));
                     w.btn_record.remove_css_class("destructive-action");
                     match (path, error) {
                         (Some(p), _) => {
                             let mb = size_bytes as f64 / 1_000_000.0;
-                            w.lbl_status.set_text(&format!("vídeo salvo ({duration_secs}s, {mb:.1} MB): {p}"));
+                            w.lbl_status.set_text(&trf(
+                        "video saved ({s}s, {mb} MB): {p}",
+                        &[
+                            ("s", duration_secs.to_string()),
+                            ("mb", format!("{mb:.1}")),
+                            ("p", p),
+                        ],
+                    ));
                             refresh_gallery(&w);
                         }
                         (None, Some(e)) => {
@@ -1911,7 +2208,7 @@ fn dlg_fatal(parent: &gtk4::Window, msg: &str) {
         .transient_for(parent)
         .modal(true)
         .buttons(ButtonsType::Close)
-        .text("Lenvix — erro")
+        .text(tr("Lenvix — error"))
         .secondary_text(msg)
         .build();
     dlg.show();

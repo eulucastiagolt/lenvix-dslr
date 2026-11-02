@@ -58,6 +58,12 @@ pub enum EngineCmd {
     SetVideoFormat(String),
     /// Define quais controles da câmera devem ser exibidos no painel
     SetVisibleControls(Vec<String>),
+    /// Define se a GUI quer receber frames de preview (quando oculta/minimizada, desativa para economizar CPU/memória)
+    SetGuiPreviewActive(bool),
+    /// Configura auto-suspensão do preview quando a janela perde foco ou é minimizada
+    SetAutoSuspendPreview(bool),
+    /// Configura idioma do aplicativo
+    SetLanguage(String),
     /// Inicia gravação contínua do stream de vídeo (FR-17b)
     StartRecording,
     /// Finaliza a gravação de vídeo
@@ -70,6 +76,8 @@ pub enum EngineCmd {
 pub enum EngineEv {
     /// novo frame (RGBA8) + fps medido (janela 2s)
     Frame { w: u32, h: u32, rgba: Vec<u8>, measured_fps: f64 },
+    /// estatísticas de stream quando a entrega de frames para a GUI está suspensa
+    StreamStats { measured_fps: f64 },
     CameraOpened { model: String },
     CamerasList { cameras: Vec<(String, String)>, active: (String, String) },
     PreviewLost(String),
@@ -103,6 +111,8 @@ pub enum EngineEv {
         audio_source: String,
         video_format: String,
         visible_controls: Vec<String>,
+        language: String,
+        auto_suspend_preview: bool,
     },
     /// câmera conectada/desconectada (preview anda/para; standby assume)
     Connected(bool),
@@ -459,6 +469,11 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
     }
 
     // sincroniza a GUI com o estado salvo ANTES de qualquer interação
+    let mut language = saved.language.clone();
+    let mut auto_suspend_preview = saved.auto_suspend_preview;
+    let mut gui_preview_active = true;
+    let mut yuyv_buf: Vec<u8> = Vec::new();
+
     send(ev_tx, EngineEv::AppState {
         fps: target_fps,
         webcam: webcam_on,
@@ -473,27 +488,35 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
         audio_source: audio_source.clone(),
         video_format: video_format.clone(),
         visible_controls: visible_controls.clone(),
+        language: language.clone(),
+        auto_suspend_preview,
     });
     let mut conflicted_devices: std::collections::HashSet<u32> = std::collections::HashSet::new();
     send_devices_list(ev_tx, video_device, &conflicted_devices);
     send(ev_tx, EngineEv::Connected(false));
     send(ev_tx, EngineEv::LiveViewStatus(false));
 
-    // persistência com throttle (sliders disparam dezenas de cmds por segundo)
-    let snapshot = |fps: u32, web: bool, mir: bool, t: &Transform, ac: bool, vd: u32, asrc: &str, vfmt: &str, vc: &[String]| settings::Settings {
-        fps,
-        webcam: web,
-        mirror: mir,
-        zoom: t.zoom,
-        pan_x: t.pan_x,
-        pan_y: t.pan_y,
-        out: t.out,
-        autoconnect: ac,
-        video_device: vd,
-        audio_source: asrc.to_string(),
-        video_format: vfmt.to_string(),
-        visible_controls: vc.to_vec(),
-    };
+    macro_rules! current_settings {
+        () => {
+            settings::Settings {
+                fps: target_fps,
+                webcam: webcam_on,
+                mirror,
+                zoom: transf.zoom,
+                pan_x: transf.pan_x,
+                pan_y: transf.pan_y,
+                out: transf.out,
+                autoconnect,
+                video_device,
+                audio_source: audio_source.clone(),
+                video_format: video_format.clone(),
+                visible_controls: visible_controls.clone(),
+                language: language.clone(),
+                auto_suspend_preview,
+            }
+        };
+    }
+
     let mut last_save = Instant::now();
     let mut save_st = |force: bool, s: &settings::Settings| {
         if force || last_save.elapsed() >= Duration::from_millis(300) {
@@ -507,7 +530,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
                 EngineCmd::Quit => {
-                    settings::save(&snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls));
+                    settings::save(&current_settings!());
                     crate::core::log::log("INFO", "engine encerrada");
                     drop(writer.take()); // fecha fd e (limpeza FR-22)
                     drop(cam.take()); // libera o USB para outros apps
@@ -515,13 +538,11 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                 }
                 EngineCmd::SetFps(f) => {
                     target_fps = f.max(1);
-                    let s = snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls);
-                    save_st(true, &s);
+                    save_st(true, &current_settings!());
                 }
                 EngineCmd::SetWebcam(on) => {
                     webcam_on = on;
-                    let s = snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls);
-                    save_st(true, &s);
+                    save_st(true, &current_settings!());
                     last_fmt_warn = None;
                     match (&on, &mut writer) {
                         (true, None) => {
@@ -578,7 +599,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                         // desligar mataria o stream gravado (contador sem frames)
                         if !on && recorder.is_some() {
                             crate::core::log::log("WARN", "Live View não desliga durante a gravação — pare a gravação primeiro");
-                            send(ev_tx, EngineEv::PreviewLost("pare a gravação antes de desligar o Live View".into()));
+                            send(ev_tx, EngineEv::PreviewLost(super::i18n::tr("stop the recording before turning off Live View")));
                             send(ev_tx, EngineEv::LiveViewStatus(true));
                             continue;
                         }
@@ -598,8 +619,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                 }
                 EngineCmd::SetVideoDevice(dev_nr) => {
                     video_device = dev_nr;
-                    let s = snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls);
-                    save_st(true, &s);
+                    save_st(true, &current_settings!());
                     crate::core::log::log("INFO", &format!("saída virtual alterada para /dev/video{dev_nr}"));
                     if writer.is_some() {
                         restart_writer(&mut writer, ev_tx, video_device, "troca de device virtual");
@@ -615,8 +635,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                             if writer.is_some() {
                                 writer = Some(new_wr);
                             }
-                            let s = snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls);
-                            save_st(true, &s);
+                            save_st(true, &current_settings!());
                             send_devices_list(ev_tx, video_device, &conflicted_devices);
                             crate::core::log::log("INFO", &format!("nova saída /dev/video{new_n} criada e selecionada"));
                         }
@@ -638,7 +657,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                                 push_tree(cam.as_ref().unwrap(), ev_tx);
                             }
                             Ok(None) => send(ev_tx, EngineEv::PreviewLost(
-                                "nenhuma câmera detectada — conecte via USB e clique em Conectar".into(),
+                                super::i18n::tr("no camera detected — plug in via USB and click Connect"),
                             )),
                             Err(e) => {
                                 crate::core::log::log("WARN", &format!("conectar: {e}"));
@@ -657,7 +676,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                                 path: None,
                                 duration_secs: 0,
                                 size_bytes: 0,
-                                error: Some("gravação interrompida: câmera desconectada".into()),
+                                error: Some(super::i18n::tr("recording aborted: camera disconnected")),
                             });
                         }
                         lv_for_rec = false;
@@ -701,7 +720,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                     let Some(c) = cam.as_ref() else {
                         send(ev_tx, EngineEv::CaptureDone {
                             path: None,
-                            error: Some("config: câmera não conectada".into()),
+                            error: Some(super::i18n::tr("config: camera not connected")),
                         });
                         continue;
                     };
@@ -748,7 +767,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                     } else {
                         send(ev_tx, EngineEv::CaptureDone {
                             path: None,
-                            error: Some(format!("botão {name}: câmera não conectada")),
+                            error: Some(super::i18n::trf("button {name}: camera not connected", &[("name", name.clone())])),
                         });
                     }
                 }
@@ -758,19 +777,17 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                     } else {
                         send(ev_tx, EngineEv::CaptureDone {
                             path: None,
-                            error: Some("captura: câmera não conectada".into()),
+                            error: Some(super::i18n::tr("capture: camera not connected")),
                         });
                     }
                 }
                 EngineCmd::SetMirror(v) => {
                     mirror = v;
-                    let s = snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls);
-                    save_st(true, &s);
+                    save_st(true, &current_settings!());
                 }
                 EngineCmd::SetZoom(z) => {
                     transf.zoom = z;
-                    let s = snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls);
-                    save_st(false, &s);
+                    save_st(false, &current_settings!());
                 }
                 EngineCmd::SetZoomPos { x, y } => {
                     if let Some(x) = x {
@@ -779,13 +796,11 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                     if let Some(y) = y {
                         transf.pan_y = y;
                     }
-                    let s = snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls);
-                    save_st(false, &s);
+                    save_st(false, &current_settings!());
                 }
                 EngineCmd::SetOutSize(out) => {
                     transf.out = out;
-                    let s = snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls);
-                    save_st(true, &s);
+                    save_st(true, &current_settings!());
                     standby = None; // limpa cache de frame standby para regenerar
                     last_fmt_warn = None;
                     crate::core::log::log(
@@ -802,8 +817,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                 }
                 EngineCmd::SetAutostart(v) => {
                     autoconnect = v;
-                    let s = snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls);
-                    save_st(true, &s);
+                    save_st(true, &current_settings!());
                     crate::core::log::log("INFO", &format!("auto-conectar USB: {v}"));
                 }
                 EngineCmd::SetScanning(v) => {
@@ -835,21 +849,32 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                 }
                 EngineCmd::SetAudioSource(src) => {
                     audio_source = src;
-                    let s = snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls);
-                    save_st(true, &s);
+                    save_st(true, &current_settings!());
                     crate::core::log::log("INFO", &format!("fonte de áudio alterada para: {audio_source}"));
                 }
                 EngineCmd::SetVideoFormat(fmt) => {
                     video_format = fmt;
-                    let s = snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls);
-                    save_st(true, &s);
+                    save_st(true, &current_settings!());
                     crate::core::log::log("INFO", &format!("formato de vídeo gravado alterado para: {video_format}"));
                 }
                 EngineCmd::SetVisibleControls(list) => {
                     visible_controls = list;
-                    let s = snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls);
-                    save_st(true, &s);
+                    save_st(true, &current_settings!());
                     crate::core::log::log("INFO", &format!("controles visíveis atualizados: {} item(s)", visible_controls.len()));
+                }
+                EngineCmd::SetGuiPreviewActive(active) => {
+                    gui_preview_active = active;
+                    crate::core::log::log("INFO", &format!("gui preview ativo: {active}"));
+                }
+                EngineCmd::SetAutoSuspendPreview(active) => {
+                    auto_suspend_preview = active;
+                    save_st(true, &current_settings!());
+                    crate::core::log::log("INFO", &format!("auto suspend preview alterado para: {active}"));
+                }
+                EngineCmd::SetLanguage(lang) => {
+                    language = lang;
+                    save_st(true, &current_settings!());
+                    crate::core::log::log("INFO", &format!("idioma alterado para: {language}"));
                 }
                 EngineCmd::StartRecording => {
                     if recorder.is_some() {
@@ -863,7 +888,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                             path: None,
                             duration_secs: 0,
                             size_bytes: 0,
-                            error: Some("conecte a câmera para gravar vídeo".into()),
+                            error: Some(super::i18n::tr("connect a camera to record video")),
                         });
                         continue;
                     }
@@ -883,8 +908,8 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                             let path_s = rec.path().to_string_lossy().into_owned();
                             crate::core::log::log("INFO", &format!("gravação iniciada: {path_s}"));
                             crate::core::notify::notify(
-                                "Lenvix — Gravação Iniciada",
-                                &format!("Gravando em: {}", rec.path().file_name().unwrap_or_default().to_string_lossy()),
+                                &super::i18n::trf("Lenvix — Recording Started", &[]),
+                                &super::i18n::trf("Saving as: {name}", &[("name", rec.path().file_name().unwrap_or_default().to_string_lossy().into_owned())]),
                                 Some("media-record"),
                             );
                             send(ev_tx, EngineEv::RecordingStarted { path: path_s });
@@ -913,11 +938,13 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                                     &format!("gravação concluída: {path_s} ({dur_secs}s, {mb:.1}MB)"),
                                 );
                                 crate::core::notify::notify(
-                                    "Lenvix — Gravação Concluída",
-                                    &format!(
-                                        "Salvo: {} ({:.1} MB)",
-                                        path.file_name().unwrap_or_default().to_string_lossy(),
-                                        mb
+                                    &super::i18n::tr("Lenvix — Recording Finished"),
+                                    &super::i18n::trf(
+                                        "Saved: {name} ({mb} MB)",
+                                        &[
+                                            ("name", path.file_name().unwrap_or_default().to_string_lossy().into_owned()),
+                                            ("mb", format!("{mb:.1}")),
+                                        ],
                                     ),
                                     Some("video-x-generic"),
                                 );
@@ -1047,17 +1074,24 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                 false
             };
 
-            // 2. Alimenta a GUI para que o preview se mantenha ativo mesmo sem câmera em 16:9!
-            send(ev_tx, EngineEv::Frame {
-                w: cache.w,
-                h: cache.h,
-                rgba: cache.rgba.clone(),
-                measured_fps: f64::from(target_fps),
-            });
+            // 2. Alimenta a GUI apenas se o preview estiver ativo
+            if gui_preview_active {
+                send(ev_tx, EngineEv::Frame {
+                    w: cache.w,
+                    h: cache.h,
+                    rgba: cache.rgba.clone(),
+                    measured_fps: f64::from(target_fps),
+                });
+            }
 
             if dead {
                 writer = None;
                 standby = None;
+            }
+
+            if !gui_preview_active && writer.is_none() {
+                let _ = cmd_rx.recv_timeout(Duration::from_millis(150));
+                continue;
             }
 
             // 3. Rate limiting monotônico (FR-06)
@@ -1069,6 +1103,14 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
         }
 
         // —— câmera conectada: pipeline de preview —————————————————————
+        // Se o preview da GUI estiver suspenso E nem a webcam virtual nem a gravação estiverem ativas,
+        // suspende a captura de preview da câmera: poupa bateria, calor e 100% de CPU.
+        let stream_needed = writer.is_some() || recorder.is_some();
+        if !gui_preview_active && !stream_needed {
+            let _ = cmd_rx.recv_timeout(Duration::from_millis(150));
+            continue;
+        }
+
         let c = cam.as_ref().expect("cam presente aqui");
         let t0 = Instant::now();
         let jpeg = match c.capture_preview().wait().and_then(|f| f.get_data(&context).wait()) {
@@ -1099,7 +1141,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                             path: None,
                             duration_secs: 0,
                             size_bytes: 0,
-                            error: Some("gravação interrompida: câmera desconectada (USB)".into()),
+                            error: Some(super::i18n::tr("recording aborted: camera disconnected (USB)")),
                         });
                     }
                     lv_for_rec = false;
@@ -1162,8 +1204,8 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                         ev_tx,
                     );
                     if let Some(wr) = writer.as_mut() {
-                        let yuyv = if eff == (w, h) {
-                            yuv::rgb_to_yuyv(&rgb, w, h)
+                        if eff == (w, h) {
+                            yuv::rgb_to_yuyv_into(&rgb, w, h, &mut yuyv_buf);
                         } else {
                             let (_, _, eff_rgb) = transform::apply(
                                 &rgb,
@@ -1171,9 +1213,9 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                                 h,
                                 &Transform { zoom: 1.0, pan_x: 0, pan_y: 0, out: Some(eff) },
                             );
-                            yuv::rgb_to_yuyv(&eff_rgb, eff.0, eff.1)
+                            yuv::rgb_to_yuyv_into(&eff_rgb, eff.0, eff.1, &mut yuyv_buf);
                         };
-                        if push_yuyv(wr, ev_tx, &yuyv) {
+                        if push_yuyv(wr, ev_tx, &yuyv_buf) {
                             writer = None;
                         }
                     }
@@ -1195,16 +1237,22 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                     }
                 };
 
-                // 6. frame → GUI (não bloqueia: drop se a GUI estiver lenta)
-                if ev_tx
-                    .send_timeout(
-                        EngineEv::Frame { w, h, rgba, measured_fps },
-                        Duration::from_millis(250),
-                    )
-                    .is_err()
-                {
-                    settings::save(&snapshot(target_fps, webcam_on, mirror, &transf, autoconnect, video_device, &audio_source, &video_format, &visible_controls));
-                    return Ok(()); // GUI saiu; fim
+                // 6. frame → GUI (apenas se gui_preview_active; poupa alocações pesadas quando oculta)
+                if gui_preview_active {
+                    let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+                    yuv::rgb_to_rgba(&rgb, &mut rgba);
+                    if ev_tx
+                        .send_timeout(
+                            EngineEv::Frame { w, h, rgba, measured_fps },
+                            Duration::from_millis(250),
+                        )
+                        .is_err()
+                    {
+                        settings::save(&current_settings!());
+                        return Ok(()); // GUI saiu; fim
+                    }
+                } else if stream_needed {
+                    send(ev_tx, EngineEv::StreamStats { measured_fps });
                 }
             }
             None => {
@@ -1402,8 +1450,11 @@ fn capture_photo(cam: &Camera, ev_tx: &Sender<EngineEv>) {
     }
     crate::core::log::log("INFO", &format!("captura ok: {dest_s}"));
     crate::core::notify::notify(
-        "Lenvix — Foto Capturada",
-        &format!("Salva em: {}", dest.file_name().unwrap_or_default().to_string_lossy()),
+        &super::i18n::tr("Lenvix — Photo Captured"),
+        &super::i18n::trf(
+            "Saved as: {name}",
+            &[("name", dest.file_name().unwrap_or_default().to_string_lossy().into_owned())],
+        ),
         Some("camera-photo-symbolic"),
     );
     send(ev_tx, EngineEv::CaptureDone { path: Some(dest_s), error: None });

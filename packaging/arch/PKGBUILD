@@ -1,6 +1,6 @@
 # Maintainer: Lucas Tiago <lucastiagolt>
 pkgname=lenvix-bin
-pkgver=0.3.0
+pkgver=0.4.0
 pkgrel=1
 pkgdesc="DSLR & mirrorless live preview, controls and virtual webcam for Linux"
 arch=('x86_64')
@@ -22,4 +22,9 @@ package() {
         "${pkgdir}/usr/share/icons/hicolor/scalable/apps/io.github.eulucastiagolt.lenvix.svg"
     install -Dm644 "${startdir}/../../assets/io.github.eulucastiagolt.lenvix.metainfo.xml" \
         "${pkgdir}/usr/share/metainfo/io.github.eulucastiagolt.lenvix.metainfo.xml"
+
+    if [ -d "${startdir}/../../i18n" ]; then
+        mkdir -p "${pkgdir}/usr/share/lenvix/i18n"
+        install -Dm644 "${startdir}/../../i18n/"* "${pkgdir}/usr/share/lenvix/i18n/"
+    fi
 }

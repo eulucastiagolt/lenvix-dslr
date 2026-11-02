@@ -4,7 +4,7 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../.." && pwd)"
 BUILD_DIR="$ROOT/target/deb-build"
-VERSION="${LENVIX_VERSION:-0.3.0}"
+VERSION="${LENVIX_VERSION:-0.4.0}"
 DEB_NAME="lenvix_${VERSION}_amd64.deb"
 
 rm -rf "$BUILD_DIR"
@@ -19,6 +19,10 @@ install -m755 "$ROOT/target/release/lenvix" "$BUILD_DIR/data/usr/bin/lenvix"
 install -m644 "$ROOT/assets/io.github.eulucastiagolt.lenvix.desktop" "$BUILD_DIR/data/usr/share/applications/"
 install -m644 "$ROOT/assets/io.github.eulucastiagolt.lenvix.svg" "$BUILD_DIR/data/usr/share/icons/hicolor/scalable/apps/"
 install -m644 "$ROOT/assets/io.github.eulucastiagolt.lenvix.metainfo.xml" "$BUILD_DIR/data/usr/share/metainfo/"
+if [ -d "$ROOT/i18n" ]; then
+    mkdir -p "$BUILD_DIR/data/usr/share/lenvix/i18n"
+    cp -r "$ROOT/i18n/"* "$BUILD_DIR/data/usr/share/lenvix/i18n/"
+fi
 
 # Create control file (EOF sem aspas: versão vem da variável)
 cat << EOF > "$BUILD_DIR/control/control"
