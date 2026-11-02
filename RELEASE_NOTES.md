@@ -1,36 +1,29 @@
-# Lenvix v0.4.0 (Beta) — Release Notes
+# Lenvix v0.5.0 (Beta) — Release Notes
 
 Lenvix turns your DSLR or mirrorless camera into a high-performance virtual webcam and recording studio on Linux, powered by Rust, GTK4/Adwaita, and GStreamer.
 
 ---
 
-## 🌟 What's New in v0.4.0
+## 🌟 What's New in v0.5.0
 
-### 🌐 Internationalization (i18n)
-- **Multi-language Support:** Built-in catalog support via GNU gettext.
-- **Languages Included:**
-  - English (`en_US`) — default.
-  - Brazilian Portuguese (`pt_BR`) — fully translated UI, dialogs, status indicators, and settings.
-- **Language Switcher:** Change interface language on the fly directly in the Settings window without restarting.
-
-### ⚡ Performance & Memory Optimizations
-- **Zero-Allocation Color Conversion:**
-  - Redesigned `rgb_to_yuyv_into` using a reusable engine scratch buffer.
-  - Eliminates per-frame heap churn (~120 MB/s saved at 1080p30 / 60 FPS).
-- **Vectorized RGB-to-RGBA Processing:**
-  - Utilizes 4-byte chunked mutations (`as_chunks_mut::<4>`) for preview texture generation, optimizing cache locality and compiler auto-vectorization.
-- **Camera Settings Cache:**
-  - Replaced redundant string lookups with instant macro snapshots (`current_settings!()`), cutting UI thread overhead.
-
-### 👁️ Preview Memory Reclamation & Auto-Suspend (OBS-style)
-- **Manual Preview Hide:**
-  - Headerbar toggle button and context menu option to hide the live camera preview.
-  - Automatically clears GPU and RAM texture memory (`picture.set_paintable(None)`), lowering idle CPU and memory consumption.
-- **Smart Auto-Suspend:**
-  - When enabled in Settings, the live preview automatically suspends when the Lenvix window is minimized or loses focus.
-  - Automatically resumes instantly when the window is brought back to focus.
-- **Zero-CPU USB Idle:**
-  - USB frame polling via `gphoto2` pauses when the preview is suspended and the virtual webcam/recorder are not actively streaming.
+### 🎭 Virtual Background & Blur (Google Meet Style)
+- **Real-Time Person Segmentation:**
+  - Integrated neural network human segmentation powered by Google's MediaPipe Selfie Segmentation.
+  - 100% pure Rust inference via `tract-onnx`: no external C/C++ dynamic libraries, no CUDA required, and works entirely offline.
+  - Lightning-fast CPU inference: ~4.8ms per frame, easily sustaining 30 to 60 FPS in real time.
+- **Configurable Background Blur:**
+  - Soft portrait depth-of-field effect (Bokeh).
+  - Adjustable blur density slider from 1 (subtle) to 100 (heavy privacy blur).
+  - High-performance multi-pass separable box blur with linear $O(1)$ running-sum sampling, taking under 1ms per frame.
+- **Custom Image Background Replacement:**
+  - Replace your background with any custom picture (PNG, JPEG, WebP).
+  - Native file picker dialog with automatic aspect-fill scaling and centered cropping.
+  - Image texture caching in memory for zero disk I/O overhead while streaming.
+- **Universal Synchronization:**
+  - Virtual background effects apply simultaneously to the live GUI preview, the V4L2 virtual webcam output (Google Meet, Zoom, OBS, Discord), and local video recordings.
+- **Effortless UI Integration:**
+  - Dedicated "Virtual Background & Blur" button in the header bar with an interactive Google Meet-style popover for quick toggles and slider adjustments on the fly.
+  - Full configuration persistence in `~/.config/lenvix/settings.conf`.
 
 ---
 
@@ -39,25 +32,25 @@ Lenvix turns your DSLR or mirrorless camera into a high-performance virtual webc
 ### 🐧 AppImage (Universal Linux)
 Portable binary that runs on almost any modern Linux distribution:
 ```bash
-chmod +x Lenvix-0.4.0-x86_64.AppImage
-./Lenvix-0.4.0-x86_64.AppImage
+chmod +x Lenvix-0.5.0-x86_64.AppImage
+./Lenvix-0.5.0-x86_64.AppImage
 ```
 
 ### 📦 Debian / Ubuntu / Linux Mint (`.deb`)
 ```bash
-sudo apt install ./lenvix_0.4.0_amd64.deb
+sudo apt install ./lenvix_0.5.0_amd64.deb
 ```
 
 ### 🎩 Fedora / RHEL / openSUSE (`.rpm`)
 ```bash
-sudo dnf install ./lenvix-0.4.0-1.x86_64.rpm
+sudo dnf install ./lenvix-0.5.0-1.x86_64.rpm
 ```
 
 ### 📁 Tarball (`.tar.gz`)
 Standalone archive with installer script:
 ```bash
-tar -xzf lenvix-v0.4.0-linux-x86_64.tar.gz
-cd lenvix-v0.4.0-linux-x86_64
+tar -xzf lenvix-v0.5.0-linux-x86_64.tar.gz
+cd lenvix-v0.5.0-linux-x86_64
 sudo ./install.sh
 ```
 

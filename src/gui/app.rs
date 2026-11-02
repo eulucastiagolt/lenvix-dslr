@@ -75,6 +75,12 @@ struct Widgets {
     btn_liveview: gtk4::Button,
     #[allow(deprecated)]
     dev_combo: gtk4::ComboBoxText,
+    rb_bg_off: gtk4::CheckButton,
+    rb_bg_blur: gtk4::CheckButton,
+    rb_bg_image: gtk4::CheckButton,
+    blur_density_scale: gtk4::Scale,
+    lbl_bg_image: gtk4::Label,
+    selected_bg_image: Rc<RefCell<Option<String>>>,
     lbl_session: gtk4::Label,
     gal_box: gtk4::Box,
     config_box: gtk4::Box,
@@ -128,6 +134,91 @@ pub fn activate(
         .tooltip_text(tr("Hide preview (save CPU and memory)"))
         .build();
     header.pack_end(&btn_toggle_preview);
+
+    let btn_bg_effects = gtk4::MenuButton::builder()
+        .icon_name("preferences-desktop-wallpaper-symbolic")
+        .tooltip_text(tr("Virtual background & blur (Google Meet style)"))
+        .build();
+    header.pack_end(&btn_bg_effects);
+
+    let bg_popover = gtk4::Popover::builder().build();
+    let bg_box = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Vertical)
+        .spacing(10)
+        .margin_start(14)
+        .margin_end(14)
+        .margin_top(14)
+        .margin_bottom(14)
+        .build();
+
+    let bg_title = gtk4::Label::builder()
+        .label(format!("<b>{}</b>", tr("Virtual Background & Blur")))
+        .use_markup(true)
+        .halign(Align::Start)
+        .build();
+    bg_box.append(&bg_title);
+
+    let rb_bg_off = gtk4::CheckButton::builder()
+        .label(tr("None (normal camera)"))
+        .active(true)
+        .build();
+    bg_box.append(&rb_bg_off);
+
+    let rb_bg_blur = gtk4::CheckButton::builder()
+        .label(tr("Blur background"))
+        .group(&rb_bg_off)
+        .build();
+    bg_box.append(&rb_bg_blur);
+
+    let blur_ctrl_box = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Vertical)
+        .spacing(4)
+        .margin_start(20)
+        .sensitive(false)
+        .build();
+    let blur_density_lbl = gtk4::Label::builder()
+        .label(tr("Blur density:"))
+        .halign(Align::Start)
+        .css_classes(["dim-label"])
+        .build();
+    let blur_density_scale = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 1.0, 100.0, 1.0);
+    blur_density_scale.set_value(40.0);
+    blur_density_scale.set_hexpand(true);
+    blur_density_scale.set_draw_value(true);
+    blur_density_scale.set_value_pos(gtk4::PositionType::Right);
+    blur_ctrl_box.append(&blur_density_lbl);
+    blur_ctrl_box.append(&blur_density_scale);
+    bg_box.append(&blur_ctrl_box);
+
+    let rb_bg_image = gtk4::CheckButton::builder()
+        .label(tr("Custom image"))
+        .group(&rb_bg_off)
+        .build();
+    bg_box.append(&rb_bg_image);
+
+    let img_ctrl_box = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Vertical)
+        .spacing(6)
+        .margin_start(20)
+        .sensitive(false)
+        .build();
+    let btn_pick_image = gtk4::Button::builder()
+        .label(tr("Choose image..."))
+        .halign(Align::Start)
+        .build();
+    let lbl_bg_image = gtk4::Label::builder()
+        .label(tr("No image selected"))
+        .halign(Align::Start)
+        .ellipsize(gtk4::pango::EllipsizeMode::Middle)
+        .max_width_chars(24)
+        .css_classes(["dim-label"])
+        .build();
+    img_ctrl_box.append(&btn_pick_image);
+    img_ctrl_box.append(&lbl_bg_image);
+    bg_box.append(&img_ctrl_box);
+
+    bg_popover.set_child(Some(&bg_box));
+    btn_bg_effects.set_popover(Some(&bg_popover));
 
     let btn_settings = gtk4::Button::builder()
         .icon_name("emblem-system-symbolic")
@@ -1135,6 +1226,110 @@ pub fn activate(
         });
     }
 
+    // ------- Efeitos de Fundo Virtual (Google Meet style) -------
+    let selected_bg_image: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+
+    let apply_bg_config = {
+        let cmd_tx = engine.borrow().cmd_tx.clone();
+        let rb_bg_blur = rb_bg_blur.clone();
+        let rb_bg_image = rb_bg_image.clone();
+        let blur_density_scale = blur_density_scale.clone();
+        let selected_bg_image = selected_bg_image.clone();
+        let blur_ctrl_box = blur_ctrl_box.clone();
+        let img_ctrl_box = img_ctrl_box.clone();
+        let suppress = suppress.clone();
+        move || {
+            if suppress.get() {
+                return;
+            }
+            let mode = if rb_bg_blur.is_active() {
+                blur_ctrl_box.set_sensitive(true);
+                img_ctrl_box.set_sensitive(false);
+                crate::core::segmentation::BackgroundMode::Blur
+            } else if rb_bg_image.is_active() {
+                blur_ctrl_box.set_sensitive(false);
+                img_ctrl_box.set_sensitive(true);
+                crate::core::segmentation::BackgroundMode::Image
+            } else {
+                blur_ctrl_box.set_sensitive(false);
+                img_ctrl_box.set_sensitive(false);
+                crate::core::segmentation::BackgroundMode::Off
+            };
+            let blur_density = blur_density_scale.value().round() as u32;
+            let image_path = selected_bg_image.borrow().clone();
+
+            let _ = cmd_tx.send(EngineCmd::SetVirtualBackground(
+                crate::core::segmentation::VirtualBackgroundConfig {
+                    mode,
+                    blur_density,
+                    image_path,
+                },
+            ));
+        }
+    };
+
+    {
+        let apply = apply_bg_config.clone();
+        rb_bg_off.connect_toggled(move |_| apply());
+    }
+    {
+        let apply = apply_bg_config.clone();
+        rb_bg_blur.connect_toggled(move |_| apply());
+    }
+    {
+        let apply = apply_bg_config.clone();
+        rb_bg_image.connect_toggled(move |_| apply());
+    }
+    {
+        let apply = apply_bg_config.clone();
+        blur_density_scale.connect_value_changed(move |_| apply());
+    }
+    {
+        let window = window.clone();
+        let selected_bg_image = selected_bg_image.clone();
+        let lbl_bg_image = lbl_bg_image.clone();
+        let rb_bg_image = rb_bg_image.clone();
+        let apply = apply_bg_config.clone();
+        btn_pick_image.connect_clicked(move |_| {
+            #[allow(deprecated)]
+            let dialog = gtk4::FileChooserNative::new(
+                Some(&tr("Select background image")),
+                Some(&window),
+                gtk4::FileChooserAction::Open,
+                Some(&tr("Open")),
+                Some(&tr("Cancel")),
+            );
+            let filter = gtk4::FileFilter::new();
+            filter.set_name(Some(&tr("Images (JPEG, PNG, WebP)")));
+            filter.add_mime_type("image/jpeg");
+            filter.add_mime_type("image/png");
+            filter.add_mime_type("image/webp");
+            #[allow(deprecated)]
+            dialog.set_filter(&filter);
+
+            let selected = selected_bg_image.clone();
+            let lbl = lbl_bg_image.clone();
+            let rb = rb_bg_image.clone();
+            let apply = apply.clone();
+            dialog.connect_response(move |d, resp| {
+                if resp == gtk4::ResponseType::Accept {
+                    #[allow(deprecated)]
+                    if let Some(path) = d.file().and_then(|f| f.path()) {
+                        let path_str = path.to_string_lossy().to_string();
+                        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                            lbl.set_text(name);
+                        }
+                        *selected.borrow_mut() = Some(path_str);
+                        rb.set_active(true);
+                        apply();
+                    }
+                }
+            });
+            #[allow(deprecated)]
+            dialog.show();
+        });
+    }
+
     // menu de contexto do preview (clique direito): captura, live view, pasta, alternar preview
     let frame_gc = gtk4::GestureClick::new();
     frame_gc.set_button(3);
@@ -1281,6 +1476,12 @@ pub fn activate(
         lbl_scan_status,
         btn_liveview,
         dev_combo,
+        rb_bg_off,
+        rb_bg_blur,
+        rb_bg_image,
+        blur_density_scale,
+        lbl_bg_image,
+        selected_bg_image,
         lbl_session,
         gal_box,
         config_box,
@@ -2031,7 +2232,26 @@ fn poll_events(
                 EngineEv::StreamStats { measured_fps } => {
                     w.lbl_fps.set_text(&format!("fps: {measured_fps:.1} — {}", tr("preview suspended")));
                 }
-                EngineEv::AppState { fps, webcam, mirror, zoom, pan_x, pan_y, out, autoconnect, video_device: _, liveview, audio_source, video_format, visible_controls, language, auto_suspend_preview } => {
+                EngineEv::AppState {
+                    fps,
+                    webcam,
+                    mirror,
+                    zoom,
+                    pan_x,
+                    pan_y,
+                    out,
+                    autoconnect,
+                    video_device: _,
+                    liveview,
+                    audio_source,
+                    video_format,
+                    visible_controls,
+                    language,
+                    auto_suspend_preview,
+                    background_mode,
+                    blur_density,
+                    background_image,
+                } => {
                     suppress.set(true);
                     // lista salva como está: contém chaves do catálogo curado
                     // e/ou chaves dinâmicas (nomes reais da câmera)
@@ -2077,6 +2297,25 @@ fn poll_events(
                     } else {
                         #[allow(deprecated)]
                         w.audio_combo.set_active(Some(0));
+                    }
+                    match background_mode.to_ascii_lowercase().as_str() {
+                        "blur" => {
+                            w.rb_bg_blur.set_active(true);
+                        }
+                        "image" => {
+                            w.rb_bg_image.set_active(true);
+                        }
+                        _ => {
+                            w.rb_bg_off.set_active(true);
+                        }
+                    }
+                    w.blur_density_scale.set_value(f64::from(blur_density.clamp(1, 100)));
+                    if !background_image.is_empty() {
+                        let path = std::path::Path::new(&background_image);
+                        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                            w.lbl_bg_image.set_text(name);
+                        }
+                        *w.selected_bg_image.borrow_mut() = Some(background_image);
                     }
                     live_on.set(liveview);
                     suppress.set(false);

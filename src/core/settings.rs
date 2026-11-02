@@ -22,6 +22,12 @@ pub struct Settings {
     pub language: String,
     /// Suspender processamento do preview ao minimizar ou perder foco para poupar CPU/RAM.
     pub auto_suspend_preview: bool,
+    /// Efeito de fundo virtual: "off", "blur", "image".
+    pub background_mode: String,
+    /// Densidade de desfoque (1 a 100).
+    pub blur_density: u32,
+    /// Caminho da imagem de fundo personalizada.
+    pub background_image: String,
 }
 
 impl Default for Settings {
@@ -41,6 +47,9 @@ impl Default for Settings {
             visible_controls: default_visible_controls(),
             language: String::new(),
             auto_suspend_preview: true,
+            background_mode: "off".into(),
+            blur_density: 40,
+            background_image: String::new(),
         }
     }
 }
@@ -154,6 +163,20 @@ pub fn load() -> Settings {
                     s.auto_suspend_preview = b;
                 }
             }
+            "background_mode" => {
+                let m = v.to_ascii_lowercase();
+                if matches!(m.as_str(), "off" | "blur" | "image") {
+                    s.background_mode = m;
+                }
+            }
+            "blur_density" => {
+                if let Ok(d) = v.parse::<u32>() {
+                    s.blur_density = d.clamp(1, 100);
+                }
+            }
+            "background_image" => {
+                s.background_image = v.to_string();
+            }
             _ => {}
         }
     }
@@ -171,7 +194,8 @@ pub fn save(s: &Settings) {
         "# lenvix — configurações do app (gerado automaticamente)\n\
          fps={}\nwebcam={}\nmirror={}\nzoom={:.3}\npan_x={}\npan_y={}\n\
          out_w={}\nout_h={}\nautoconnect={}\nvideo_device={}\n\
-         audio_source={}\nvideo_format={}\nvisible_controls={}\nlanguage={}\nauto_suspend_preview={}\n",
+         audio_source={}\nvideo_format={}\nvisible_controls={}\nlanguage={}\nauto_suspend_preview={}\n\
+         background_mode={}\nblur_density={}\nbackground_image={}\n",
         s.fps,
         s.webcam,
         s.mirror,
@@ -187,6 +211,9 @@ pub fn save(s: &Settings) {
         s.visible_controls.join(","),
         s.language,
         s.auto_suspend_preview,
+        s.background_mode,
+        s.blur_density,
+        s.background_image,
     );
     let tmp = dir.join("settings.conf.tmp");
     if let Err(e) = std::fs::write(&tmp, txt) {

@@ -353,3 +353,38 @@ msgstr "falha ao gravar quadro: {e}"
 
 msgid "ffmpeg exited with error: {status}"
 msgstr "ffmpeg encerrou com erro: {status}"
+
+# Virtual Background & Blur (v0.5.0)
+msgid "Virtual background & blur"
+msgstr "Fundo virtual e desfoque"
+
+msgid "Virtual background & blur (Google Meet style)"
+msgstr "Fundo virtual e desfoque (estilo Google Meet)"
+
+msgid "Virtual Background & Blur"
+msgstr "Fundo Virtual e Desfoque"
+
+msgid "None (normal camera)"
+msgstr "Nenhum (câmera normal)"
+
+msgid "Blur background"
+msgstr "Desfocar fundo"
+
+msgid "Blur density:"
+msgstr "Densidade do desfoque:"
+
+msgid "Custom image"
+msgstr "Imagem personalizada"
+
+msgid "Choose image..."
+msgstr "Escolher imagem..."
+
+msgid "No image selected"
+msgstr "Nenhuma imagem selecionada"
+
+msgid "Select background image"
+msgstr "Selecionar imagem de fundo"
+
+msgid "Images (JPEG, PNG, WebP)"
+msgstr "Imagens (JPEG, PNG, WebP)"
+

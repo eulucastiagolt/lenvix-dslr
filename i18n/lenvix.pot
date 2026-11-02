@@ -356,3 +356,38 @@ msgstr ""
 
 msgid "ffmpeg exited with error: {status}"
 msgstr ""
+
+# Virtual Background & Blur (v0.5.0)
+msgid "Virtual background & blur"
+msgstr ""
+
+msgid "Virtual background & blur (Google Meet style)"
+msgstr ""
+
+msgid "Virtual Background & Blur"
+msgstr ""
+
+msgid "None (normal camera)"
+msgstr ""
+
+msgid "Blur background"
+msgstr ""
+
+msgid "Blur density:"
+msgstr ""
+
+msgid "Custom image"
+msgstr ""
+
+msgid "Choose image..."
+msgstr ""
+
+msgid "No image selected"
+msgstr ""
+
+msgid "Select background image"
+msgstr ""
+
+msgid "Images (JPEG, PNG, WebP)"
+msgstr ""
+

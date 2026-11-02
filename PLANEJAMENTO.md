@@ -640,6 +640,22 @@ Implementado (novo `core/config.rs` + extensões em `core/camera.rs` e `gui/app.
    - Atualização do `build-appimage.sh` para embutir informação `gh-releases-zsync` e gerar o artefato `.zsync` via `zsyncmake`;
    - Inclusão dos diretórios de tradução `i18n/` nos geradores de pacotes (.AppImage, .deb, .tar.gz).
 
+### 10.7 Fase 5.5 (v0.5.0 — Beta): Efeitos Visuais de Fundo Virtual (Google Meet Style)
+1. **Segmentação Humana em Tempo Real (Puro Rust)**:
+   - Integração do modelo neural MediaPipe Selfie Segmentation Landscape (256x144, 452 KB) embutido no binário;
+   - Inferência em CPU via `tract-onnx` completando em ~4.8ms por quadro (capacidade real para 60 FPS contínuos);
+   - Interpolação bilinear da máscara para as dimensões totais do sensor da câmera com tabela lookup acelerada.
+2. **Desfoque de Fundo (Background Blur)**:
+   - Densidade de desfoque ajustável pelo usuário (1 a 100);
+   - Algoritmo de box blur separável multi-pass em resolução reduzida com janela deslizante O(1), gerando efeito bokeh suave em menos de 1ms;
+   - Mistura alfa SIMD-friendly diretamente sobre o buffer RGB antes do envio para preview, gravação e webcam virtual.
+3. **Substituição por Imagem de Fundo (Custom Background)**:
+   - Suporte a imagens locais (PNG, JPEG, WebP) com redimensionamento proporcional e recorte centrado (aspect-fill);
+   - Cache em memória da imagem escalonada para eliminação de acessos a disco durante a transmissão.
+4. **Interface e Persistência**:
+   - Botão dedicado na barra de cabeçalho (`gtk4::MenuButton` com `gtk4::Popover`) estilo Google Meet para troca instantânea de efeitos;
+   - Persistência das preferências (`background_mode`, `blur_density`, `background_image`) em `settings.conf`.
+
 ---
 
 ## 11. Especificação da Fase 6 — Porte Multiplataforma para Windows (Última Fase)

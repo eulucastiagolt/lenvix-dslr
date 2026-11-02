@@ -64,6 +64,8 @@ pub enum EngineCmd {
     SetAutoSuspendPreview(bool),
     /// Configura idioma do aplicativo
     SetLanguage(String),
+    /// Configura efeitos de fundo virtual (Google Meet style: desfoque/imagem)
+    SetVirtualBackground(crate::core::segmentation::VirtualBackgroundConfig),
     /// Inicia gravação contínua do stream de vídeo (FR-17b)
     StartRecording,
     /// Finaliza a gravação de vídeo
@@ -113,6 +115,9 @@ pub enum EngineEv {
         visible_controls: Vec<String>,
         language: String,
         auto_suspend_preview: bool,
+        background_mode: String,
+        blur_density: u32,
+        background_image: String,
     },
     /// câmera conectada/desconectada (preview anda/para; standby assume)
     Connected(bool),
@@ -474,6 +479,20 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
     let mut gui_preview_active = true;
     let mut yuyv_buf: Vec<u8> = Vec::new();
 
+    let mut vb_config = crate::core::segmentation::VirtualBackgroundConfig {
+        mode: {
+            use std::str::FromStr;
+            crate::core::segmentation::BackgroundMode::from_str(&saved.background_mode).unwrap_or_default()
+        },
+        blur_density: saved.blur_density,
+        image_path: if saved.background_image.is_empty() {
+            None
+        } else {
+            Some(saved.background_image.clone())
+        },
+    };
+    let mut segmentation_engine = crate::core::segmentation::SegmentationEngine::new();
+
     send(ev_tx, EngineEv::AppState {
         fps: target_fps,
         webcam: webcam_on,
@@ -490,6 +509,9 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
         visible_controls: visible_controls.clone(),
         language: language.clone(),
         auto_suspend_preview,
+        background_mode: vb_config.mode.as_str().to_string(),
+        blur_density: vb_config.blur_density,
+        background_image: vb_config.image_path.clone().unwrap_or_default(),
     });
     let mut conflicted_devices: std::collections::HashSet<u32> = std::collections::HashSet::new();
     send_devices_list(ev_tx, video_device, &conflicted_devices);
@@ -513,6 +535,9 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                 visible_controls: visible_controls.clone(),
                 language: language.clone(),
                 auto_suspend_preview,
+                background_mode: vb_config.mode.as_str().to_string(),
+                blur_density: vb_config.blur_density,
+                background_image: vb_config.image_path.clone().unwrap_or_default(),
             }
         };
     }
@@ -876,6 +901,17 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                     save_st(true, &current_settings!());
                     crate::core::log::log("INFO", &format!("idioma alterado para: {language}"));
                 }
+                EngineCmd::SetVirtualBackground(cfg) => {
+                    vb_config = cfg;
+                    save_st(true, &current_settings!());
+                    crate::core::log::log(
+                        "INFO",
+                        &format!(
+                            "efeito de fundo virtual alterado para: {:?} (densidade: {})",
+                            vb_config.mode, vb_config.blur_density
+                        ),
+                    );
+                }
                 EngineCmd::StartRecording => {
                     if recorder.is_some() {
                         continue;
@@ -1162,7 +1198,11 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                     yuv::flip_rgb_h(&mut rgb, w0, h0);
                 }
                 // zoom/pan/saída fake: crop-fill no aspecto da saída (GUI e master respeitam transf)
-                let (w, h, rgb) = transform::apply(&rgb, w0, h0, &transf);
+                let (w, h, mut rgb) = transform::apply(&rgb, w0, h0, &transf);
+
+                // Aplica efeitos de fundo virtual (Google Meet style: desfoque/imagem personalizada)
+                segmentation_engine.process_frame(w, h, &mut rgb, &vb_config);
+
                 let mut rgba = Vec::with_capacity((w * h * 4) as usize);
                 yuv::rgb_to_rgba(&rgb, &mut rgba);
 

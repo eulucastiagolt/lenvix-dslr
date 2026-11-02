@@ -1,6 +1,6 @@
 [package]
 name = "lenvix"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 description = "DSLR/mirrorless live preview + camera controls + virtual webcam (Linux)"
 default-run = "lenvix"
@@ -12,6 +12,8 @@ zune-jpeg = "0.5"
 crossbeam-channel = "0.5.17"
 ksni = { version = "0.3.7", features = ["blocking"] }
 gettext = "0.4.0"
+tract-onnx = "0.23.9"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [profile.release]
 lto = "thin"

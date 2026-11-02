@@ -1,5 +1,5 @@
 Name:           lenvix
-Version:        %{?lenvix_version}%{!?lenvix_version:0.4.0}
+Version:        %{?lenvix_version}%{!?lenvix_version:0.5.0}
 Release:        1%{?dist}
 Summary:        DSLR & mirrorless live preview, controls and virtual webcam for Linux
 License:        GPL-3.0-or-later
