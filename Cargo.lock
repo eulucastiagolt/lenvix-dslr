@@ -1090,6 +1090,7 @@ dependencies = [
  "gtk4",
  "image",
  "ksni",
+ "rayon",
  "tract-onnx",
  "zune-jpeg",
 ]

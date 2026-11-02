@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use rayon::prelude::*;
 use tract_onnx::prelude::*;
 
 const MODEL_BYTES: &[u8] = include_bytes!("../../models/selfie_segmentation_landscape.onnx");
@@ -80,10 +81,10 @@ pub struct SegmentationEngine {
     full_mask: Vec<u8>,
     blur_down: Vec<u8>,
     blur_down_tmp: Vec<u8>,
-    blur_up: Vec<u8>,
     image_cache: Option<BackgroundImageCache>,
     lut_x: Vec<(usize, usize, f32)>,
     lut_w: u32,
+    frame_count: u64,
 }
 
 impl Default for SegmentationEngine {
@@ -101,10 +102,10 @@ impl SegmentationEngine {
             full_mask: Vec::new(),
             blur_down: Vec::new(),
             blur_down_tmp: Vec::new(),
-            blur_up: Vec::new(),
             image_cache: None,
             lut_x: Vec::new(),
             lut_w: 0,
+            frame_count: 0,
         }
     }
 
@@ -154,14 +155,22 @@ impl SegmentationEngine {
             return;
         }
 
-        // 1. Extração da máscara via rede neural
-        if let Err(e) = self.run_inference(w, h, rgb) {
-            crate::core::log::log("WARN", &format!("inferência de segmentação: {e}"));
-            return;
-        }
+        self.frame_count = self.frame_count.wrapping_add(1);
 
-        // 2. Interpolação bilinear da máscara para as dimensões totais (w, h)
-        self.upscale_mask_bilinear(w, h);
+        // Atualiza a máscara neural a cada 2 quadros (ou no primeiro),
+        // aproveitando a coerência temporal do corpo humano (padrão Google Meet/Zoom).
+        // Isso reduz o consumo de inferência neural em 50% sem perda perceptível de qualidade.
+        let should_infer = self.full_mask.is_empty() || self.frame_count.is_multiple_of(2);
+        if should_infer {
+            // 1. Extração da máscara via rede neural
+            if let Err(e) = self.run_inference(w, h, rgb) {
+                crate::core::log::log("WARN", &format!("inferência de segmentação: {e}"));
+                return;
+            }
+
+            // 2. Interpolação bilinear da máscara para as dimensões totais (w, h)
+            self.upscale_mask_bilinear(w, h);
+        }
 
         // 3. Aplicação do efeito selecionado
         match config.mode {
@@ -258,32 +267,34 @@ impl SegmentationEngine {
 
         let mh_max = (MODEL_HEIGHT - 1) as f32;
         let div_h = (h - 1).max(1) as f32;
+        let raw_mask = &self.raw_mask;
+        let lut_x = &self.lut_x;
 
-        for y in 0..h {
-            let gy = (y as f32 * mh_max / div_h).clamp(0.0, mh_max);
-            let y0 = gy.floor() as usize;
-            let y1 = (y0 + 1).min(MODEL_HEIGHT - 1);
-            let fy = gy - y0 as f32;
+        self.full_mask
+            .par_chunks_mut(w as usize)
+            .enumerate()
+            .for_each(|(y, out_row)| {
+                let gy = (y as f32 * mh_max / div_h).clamp(0.0, mh_max);
+                let y0 = gy.floor() as usize;
+                let y1 = (y0 + 1).min(MODEL_HEIGHT - 1);
+                let fy = gy - y0 as f32;
 
-            let row0 = y0 * MODEL_WIDTH;
-            let row1 = y1 * MODEL_WIDTH;
-            let out_row = (y * w) as usize;
+                let row0 = y0 * MODEL_WIDTH;
+                let row1 = y1 * MODEL_WIDTH;
 
-            for x in 0..w as usize {
-                let (x0, x1, fx) = self.lut_x[x];
-                let v00 = self.raw_mask[row0 + x0];
-                let v10 = self.raw_mask[row0 + x1];
-                let v01 = self.raw_mask[row1 + x0];
-                let v11 = self.raw_mask[row1 + x1];
+                for (x, (x0, x1, fx)) in lut_x.iter().copied().enumerate() {
+                    let v00 = raw_mask[row0 + x0];
+                    let v10 = raw_mask[row0 + x1];
+                    let v01 = raw_mask[row1 + x0];
+                    let v11 = raw_mask[row1 + x1];
 
-                let top = v00 + fx * (v10 - v00);
-                let bot = v01 + fx * (v11 - v01);
-                let val = top + fy * (bot - top);
+                    let top = v00 + fx * (v10 - v00);
+                    let bot = v01 + fx * (v11 - v01);
+                    let val = top + fy * (bot - top);
 
-                // Converter para u8 (0..255)
-                self.full_mask[out_row + x] = (val.clamp(0.0, 1.0) * 255.0) as u8;
-            }
-        }
+                    out_row[x] = (val.clamp(0.0, 1.0) * 255.0) as u8;
+                }
+            });
     }
 
     /// Aplica desfoque de alta performance com separable box blur em resolução reduzida e upscale.
@@ -322,38 +333,41 @@ impl SegmentationEngine {
             box_blur_v(&self.blur_down_tmp, &mut self.blur_down, dw as usize, dh as usize, radius);
         }
 
-        // 4. Upscale e blend simultâneo com a máscara sobre o buffer original
-        let upscale_size = (w * h * 3) as usize;
-        if self.blur_up.len() != upscale_size {
-            self.blur_up.resize(upscale_size, 0);
-        }
+        // 4. Upscale e blend simultâneo paralelo com a máscara sobre o buffer original
+        // Paralelizado por linha via Rayon, eliminando buffer intermediário (blur_up) e pulando pixels da pessoa
+        let blur_down = &self.blur_down;
+        let full_mask = &self.full_mask;
+        rgb.par_chunks_mut((w * 3) as usize)
+            .enumerate()
+            .for_each(|(y, row_rgb)| {
+                let sy = ((y as u32 * dh) / h).min(dh - 1) as usize;
+                let s_row = sy * (dw as usize) * 3;
+                let mask_row = y * w as usize;
 
-        // Upscale bilinear rápido para blur_up
-        for y in 0..h {
-            let sy = ((y * dh) / h).min(dh - 1) as usize;
-            let s_row = sy * (dw as usize) * 3;
-            let d_row = (y * w * 3) as usize;
-            for x in 0..w {
-                let sx = ((x * dw) / w).min(dw - 1) as usize;
-                let s_idx = s_row + sx * 3;
-                let d_idx = d_row + (x as usize) * 3;
-                self.blur_up[d_idx] = self.blur_down[s_idx];
-                self.blur_up[d_idx + 1] = self.blur_down[s_idx + 1];
-                self.blur_up[d_idx + 2] = self.blur_down[s_idx + 2];
-            }
-        }
+                for x in 0..w as usize {
+                    let mask_val = full_mask[mask_row + x];
+                    if mask_val == 255 {
+                        continue; // 100% pessoa: mantém pixel original
+                    }
+                    let sx = ((x as u32 * dw) / w).min(dw - 1) as usize;
+                    let s_idx = s_row + sx * 3;
+                    let d_idx = x * 3;
 
-        // 5. Alpha blend SIMD-friendly: rgb = rgb * alpha + blur_up * (1 - alpha)
-        let num_pixels = (w * h) as usize;
-        for i in 0..num_pixels {
-            let a = self.full_mask[i] as u32; // 0 (fundo) a 255 (pessoa)
-            let inv_a = 255 - a;
-            let idx = i * 3;
-
-            rgb[idx] = ((rgb[idx] as u32 * a + self.blur_up[idx] as u32 * inv_a) >> 8) as u8;
-            rgb[idx + 1] = ((rgb[idx + 1] as u32 * a + self.blur_up[idx + 1] as u32 * inv_a) >> 8) as u8;
-            rgb[idx + 2] = ((rgb[idx + 2] as u32 * a + self.blur_up[idx + 2] as u32 * inv_a) >> 8) as u8;
-        }
+                    if mask_val == 0 {
+                        // 100% fundo: cópia direta do blur
+                        row_rgb[d_idx] = blur_down[s_idx];
+                        row_rgb[d_idx + 1] = blur_down[s_idx + 1];
+                        row_rgb[d_idx + 2] = blur_down[s_idx + 2];
+                    } else {
+                        // Borda: interpolação suave
+                        let a = mask_val as u32;
+                        let inv_a = 255 - a;
+                        row_rgb[d_idx] = ((row_rgb[d_idx] as u32 * a + blur_down[s_idx] as u32 * inv_a) >> 8) as u8;
+                        row_rgb[d_idx + 1] = ((row_rgb[d_idx + 1] as u32 * a + blur_down[s_idx + 1] as u32 * inv_a) >> 8) as u8;
+                        row_rgb[d_idx + 2] = ((row_rgb[d_idx + 2] as u32 * a + blur_down[s_idx + 2] as u32 * inv_a) >> 8) as u8;
+                    }
+                }
+            });
     }
 
     /// Substitui o fundo por uma imagem personalizada com escala/crop proporcional.
@@ -385,17 +399,35 @@ impl SegmentationEngine {
             return;
         };
 
-        // Blend com a imagem de fundo: rgb = rgb * alpha + bg * (1 - alpha)
-        let num_pixels = (w * h) as usize;
-        for i in 0..num_pixels {
-            let a = self.full_mask[i] as u32;
-            let inv_a = 255 - a;
-            let idx = i * 3;
+        // Blend paralelo com a imagem de fundo: pula pixels da pessoa e cópia direta onde for fundo
+        let full_mask = &self.full_mask;
+        let cache_rgb = &cache.rgb;
+        rgb.par_chunks_mut((w * 3) as usize)
+            .enumerate()
+            .for_each(|(y, row_rgb)| {
+                let mask_row = y * w as usize;
+                let cache_row = y * (w * 3) as usize;
+                for x in 0..w as usize {
+                    let mask_val = full_mask[mask_row + x];
+                    if mask_val == 255 {
+                        continue;
+                    }
+                    let d_idx = x * 3;
+                    let c_idx = cache_row + d_idx;
 
-            rgb[idx] = ((rgb[idx] as u32 * a + cache.rgb[idx] as u32 * inv_a) >> 8) as u8;
-            rgb[idx + 1] = ((rgb[idx + 1] as u32 * a + cache.rgb[idx + 1] as u32 * inv_a) >> 8) as u8;
-            rgb[idx + 2] = ((rgb[idx + 2] as u32 * a + cache.rgb[idx + 2] as u32 * inv_a) >> 8) as u8;
-        }
+                    if mask_val == 0 {
+                        row_rgb[d_idx] = cache_rgb[c_idx];
+                        row_rgb[d_idx + 1] = cache_rgb[c_idx + 1];
+                        row_rgb[d_idx + 2] = cache_rgb[c_idx + 2];
+                    } else {
+                        let a = mask_val as u32;
+                        let inv_a = 255 - a;
+                        row_rgb[d_idx] = ((row_rgb[d_idx] as u32 * a + cache_rgb[c_idx] as u32 * inv_a) >> 8) as u8;
+                        row_rgb[d_idx + 1] = ((row_rgb[d_idx + 1] as u32 * a + cache_rgb[c_idx + 1] as u32 * inv_a) >> 8) as u8;
+                        row_rgb[d_idx + 2] = ((row_rgb[d_idx + 2] as u32 * a + cache_rgb[c_idx + 2] as u32 * inv_a) >> 8) as u8;
+                    }
+                }
+            });
     }
 }
 
@@ -576,8 +608,8 @@ mod tests {
     #[test]
     fn test_segmentation_engine_blur_pipeline() {
         let mut engine = SegmentationEngine::new();
-        let w = 64;
-        let h = 48;
+        let w = 128;
+        let h = 96;
         let mut rgb = vec![200u8; (w * h * 3) as usize];
         let config = VirtualBackgroundConfig {
             mode: BackgroundMode::Blur,

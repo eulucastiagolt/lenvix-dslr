@@ -631,7 +631,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                     }
                 }
                 EngineCmd::SetLiveView(on) => {
-                    if cam.is_some() {
+                    if let Some(ref c) = cam {
                         // durante a gravação o live view é obrigatório:
                         // desligar mataria o stream gravado (contador sem frames)
                         if !on && recorder.is_some() {
@@ -641,6 +641,8 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                             continue;
                         }
                         liveview_on = on;
+                        // Fecha fisicamente o obturador da câmera se desligado, ou abre se ligado
+                        set_camera_viewfinder(c, on);
                         crate::core::log::log(
                             "INFO",
                             if on { "Live View iniciado (obturador aberto)" } else { "Live View pausado (obturador fechado)" }
@@ -701,7 +703,10 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                                 send(ev_tx, EngineEv::PreviewLost(e));
                             }
                         }
-                    } else if !do_connect && cam.take().is_some() {
+                    } else if !do_connect && cam.is_some() {
+                        let c = cam.take().unwrap();
+                        set_camera_viewfinder(&c, false);
+                        drop(c);
                         conn = None;
                         liveview_on = false;
                         send(ev_tx, EngineEv::LiveViewStatus(false));
@@ -723,8 +728,9 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                 }
                 EngineCmd::Reselect { model, port } => {
                     selected_target = Some((model.clone(), port.clone()));
-                    if cam.is_some() {
-                        drop(cam.take());
+                    if let Some(c) = cam.take() {
+                        set_camera_viewfinder(&c, false);
+                        drop(c);
                         liveview_on = false;
                         send(ev_tx, EngineEv::LiveViewStatus(false));
                         match open_desc(&context, &model, &port) {
@@ -1028,6 +1034,9 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                     if lv_for_rec {
                         lv_for_rec = false;
                         liveview_on = false;
+                        if let Some(ref c) = cam {
+                            set_camera_viewfinder(c, false);
+                        }
                         standby = None;
                         crate::core::log::log("INFO", "Live View desligado (voltando ao estado anterior à gravação)");
                         send(ev_tx, EngineEv::LiveViewStatus(false));
@@ -1310,6 +1319,9 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                         )
                         .is_err()
                     {
+                        if let Some(ref c) = cam {
+                            set_camera_viewfinder(c, false);
+                        }
                         settings::save(&current_settings!());
                         return Ok(()); // GUI saiu; fim
                     }
@@ -1459,6 +1471,68 @@ fn find_widget(root: &gphoto2::widget::GroupWidget, path: &str) -> Option<Widget
     match w {
         Widget::Group(g) => find_widget(&g, &rest.join("/")),
         _ => None,
+    }
+}
+
+/// Busca recursiva de um widget por nome em qualquer nível da árvore
+fn find_widget_recursive(w: Widget, target_name: &str) -> Option<Widget> {
+    if w.name().eq_ignore_ascii_case(target_name) {
+        return Some(w);
+    }
+    if let Widget::Group(g) = w {
+        for child in g.children_iter() {
+            if let Some(found) = find_widget_recursive(child, target_name) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+/// Ajusta o visor/obturador da câmera física via PTP (Canon EOS, Nikon, Sony).
+/// Quando `on == false`, desativa o viewfinder, descendo o espelho e fechando o obturador.
+/// Quando `on == true`, abre o visor para transmissão de preview.
+fn set_camera_viewfinder(cam: &Camera, on: bool) {
+    let Ok(root) = cam.config().wait() else { return; };
+    let targets = ["actions/viewfinder", "viewfinder", "eosviewfinder", "settings/viewfinder"];
+    for target in targets {
+        let maybe_w = find_widget(&root, target).or_else(|| {
+            for child in root.children_iter() {
+                if let Some(w) = find_widget_recursive(child, target) {
+                    return Some(w);
+                }
+            }
+            None
+        });
+
+        if let Some(w) = maybe_w {
+            let res = match &w {
+                Widget::Toggle(t) => {
+                    t.set_toggled(on);
+                    cam.set_config(&w).wait()
+                }
+                Widget::Radio(r) => {
+                    let choice = if on { "1" } else { "0" };
+                    let _ = r.set_choice(choice);
+                    cam.set_config(&w).wait()
+                }
+                Widget::Range(rg) => {
+                    rg.set_value(if on { 1.0 } else { 0.0 });
+                    cam.set_config(&w).wait()
+                }
+                _ => Ok(()),
+            };
+            if res.is_ok() {
+                crate::core::log::log(
+                    "INFO",
+                    &format!(
+                        "viewfinder ({target}) ajustado para {on} — obturador {}",
+                        if on { "aberto" } else { "fechado" }
+                    ),
+                );
+                return;
+            }
+        }
     }
 }
 

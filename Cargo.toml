@@ -14,6 +14,7 @@ ksni = { version = "0.3.7", features = ["blocking"] }
 gettext = "0.4.0"
 tract-onnx = "0.23.9"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+rayon = "1.12"
 
 [profile.release]
 lto = "thin"
