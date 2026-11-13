@@ -1,6 +1,6 @@
 [package]
 name = "lenvix"
-version = "0.6.0"
+version = "1.0.1"
 edition = "2024"
 description = "DSLR/mirrorless live preview + camera controls + virtual webcam (Linux)"
 default-run = "lenvix"
@@ -15,6 +15,8 @@ gettext = "0.4.0"
 tract-onnx = "0.23.9"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 rayon = "1.12"
+libc = "0.2"
+libloading = "0.8"
 
 [profile.release]
 lto = "thin"

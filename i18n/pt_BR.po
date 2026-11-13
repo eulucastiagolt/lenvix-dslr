@@ -402,3 +402,69 @@ msgid "When closing the window, keeps the app running in the system tray."
 msgstr "Ao fechar a janela, mantém o aplicativo em execução na bandeja do sistema."
 
 
+
+msgid "Authorize the virtual webcam"
+msgstr "Autorizar a webcam virtual"
+
+msgid "Lenvix needs administrator permission to set up the virtual webcam."
+msgstr "O Lenvix precisa de permissão de administrador para configurar a webcam virtual."
+
+msgid "Administrator account"
+msgstr "Conta de administrador"
+
+msgid "Authenticate"
+msgstr "Autenticar"
+
+msgid "Waiting for the system…"
+msgstr "Aguardando o sistema…"
+
+msgid "Could not open the administrator prompt: {error}"
+msgstr "Não foi possível abrir o pedido de autenticação: {error}"
+
+msgid "Administrator permission is required."
+msgstr "É necessária permissão de administrador."
+
+msgid "Could not load the v4l2loopback kernel module."
+msgstr "Não foi possível carregar o módulo v4l2loopback."
+
+msgid "Administrator authentication was cancelled."
+msgstr "A autenticação de administrador foi cancelada."
+
+msgid "Administrator authentication failed."
+msgstr "A autenticação de administrador falhou."
+
+msgid "Could not set up the virtual webcam: {error}"
+msgstr "Não foi possível configurar a webcam virtual: {error}"
+
+msgid "The webcam setup returned an invalid device number."
+msgstr "A configuração da webcam retornou um número de dispositivo inválido."
+
+msgid "webcam: waiting for authorization"
+msgstr "webcam: aguardando autorização"
+
+msgid "webcam: finishing setup…"
+msgstr "webcam: concluindo a configuração…"
+
+msgid "webcam: preparing…"
+msgstr "webcam: preparando…"
+
+msgid "webcam active — {detail}"
+msgstr "webcam ativa — {detail}"
+
+msgid "webcam off — {detail}"
+msgstr "webcam desligada — {detail}"
+
+msgid "Install v4l2loopback for your running kernel, then enable the webcam again."
+msgstr "Instale o v4l2loopback para o kernel em uso e ative a webcam novamente."
+
+msgid "Could not load v4l2loopback. Check the kernel module, then try again. {error}"
+msgstr "Não foi possível carregar o v4l2loopback. Verifique o módulo do kernel e tente novamente. {error}"
+
+msgid "Administrator authentication was cancelled. Enable the webcam again to retry."
+msgstr "A autenticação foi cancelada. Ative a webcam novamente para tentar de novo."
+
+msgid "Administrator authentication failed. Check your administrator account and try again."
+msgstr "A autenticação falhou. Verifique a conta de administrador e tente novamente."
+
+msgid "{device} is busy. Close the app using it or select another virtual device."
+msgstr "{device} está ocupado. Feche o aplicativo que está usando o dispositivo ou selecione outra saída virtual."

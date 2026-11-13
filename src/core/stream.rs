@@ -7,11 +7,25 @@
 //! 4. Frames escritos com write() no fd; rate-limit feita pelo core-camera.
 
 use std::{
+    cell::OnceCell,
     fs::{File, OpenOptions},
     io::Write,
     os::fd::AsRawFd,
-    process::Command,
+    process::{Command, Stdio},
+    sync::{Arc, atomic::{AtomicBool, Ordering}},
 };
+
+use crate::core::i18n::{tr, trf};
+
+thread_local! {
+    static AUTHORIZATION: OnceCell<(Result<(), String>, Arc<AtomicBool>)> = const { OnceCell::new() };
+}
+
+pub(super) fn set_authorization(result: Result<(), String>, stopping: Arc<AtomicBool>) {
+    AUTHORIZATION.with(|auth| {
+        let _ = auth.set((result, stopping));
+    });
+}
 
 /// errno EINVAL (22) via __errno_location indireto (sem crate libc p/ isso)
 fn errno_invalid() -> i32 {
@@ -280,27 +294,42 @@ pub fn add_loopback_ioctl(nr: i32, label: &str) -> Result<u32, String> {
     Ok(ret as u32)
 }
 
-/// Executado quando invocado com privilégios de root (ex: via pkexec)
 pub fn add_loopback_root_action(nr: i32, label: &str) -> Result<u32, String> {
-    let dev_nr = add_loopback_ioctl(nr, label)?;
-    // Torna /dev/v4l2loopback acessível para todos os usuários locais
-    use std::os::unix::fs::PermissionsExt;
-    let _ = std::fs::set_permissions(
-        "/dev/v4l2loopback",
-        std::fs::Permissions::from_mode(0o666),
-    );
-    // Cria regra udev permanente para persistir
-    let _ = std::fs::write(
-        "/etc/udev/rules.d/99-v4l2loopback.rules",
-        "KERNEL==\"v4l2loopback\", MODE=\"0666\"\n",
-    );
-    Ok(dev_nr)
+    if unsafe { libc::geteuid() } != 0 {
+        return Err(tr("Administrator permission is required."));
+    }
+    if !std::path::Path::new("/dev/v4l2loopback").exists() {
+        let device = (nr >= 0).then_some(nr).unwrap_or(9);
+        let output = Command::new("/sbin/modprobe")
+            .args(["v4l2loopback", "devices=1", "exclusive_caps=1", "max_openers=30"])
+            .arg(format!("video_nr={device}"))
+            .arg(format!("card_label={label}"))
+            .env("LC_ALL", "C")
+            .output()
+            .map_err(|err| format!("modprobe: {err}"))?;
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            if error.contains("Module v4l2loopback not found") {
+                return Err(tr("Install v4l2loopback for your running kernel, then enable the webcam again."));
+            }
+            return Err(trf("Could not load v4l2loopback. Check the kernel module, then try again. {error}",
+                &[("error", error.trim().into())]));
+        }
+        wait_for_path("/dev/v4l2loopback");
+        if File::open(format!("/dev/video{device}")).is_ok_and(|file| is_loopback(&file)) {
+            return Ok(device as u32);
+        }
+    }
+    add_loopback_ioctl(nr, label)
 }
 
 fn wait_for_device(nr: u32) {
-    let p = format!("/dev/video{nr}");
+    wait_for_path(&format!("/dev/video{nr}"));
+}
+
+fn wait_for_path(path: &str) {
     for _ in 0..30 {
-        if std::path::Path::new(&p).exists() {
+        if std::path::Path::new(path).exists() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
@@ -311,39 +340,71 @@ fn wait_for_device(nr: u32) {
 pub fn create_loopback_device(preferred_nr: Option<u32>, label: &str) -> Result<u32, String> {
     let nr = preferred_nr.map(|n| n as i32).unwrap_or(-1);
 
-    // 1. Tenta direto (se /dev/v4l2loopback já tiver permissão)
     if let Ok(dev_nr) = add_loopback_ioctl(nr, label) {
         wait_for_device(dev_nr);
         return Ok(dev_nr);
     }
 
-    // 2. Se /dev/v4l2loopback não existe, carrega o módulo
-    if !std::path::Path::new("/dev/v4l2loopback").exists() {
-        load_module(preferred_nr.unwrap_or(9), label)?;
-        if let Ok(dev_nr) = add_loopback_ioctl(nr, label) {
-            wait_for_device(dev_nr);
-            return Ok(dev_nr);
-        }
+    let stopping = AUTHORIZATION.with(|auth| {
+        auth.get().map(|(result, stopping)| result.clone().map(|()| Arc::clone(stopping)))
+            .transpose()
+    })?;
+    let cancelled = || stopping.as_ref().is_some_and(|flag| flag.load(Ordering::Acquire));
+    if cancelled() {
+        return Err(tr("Administrator authentication was cancelled. Enable the webcam again to retry."));
     }
 
-    // 3. Invoca helper com pkexec
-    let current_exe = std::env::current_exe()
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| "lenvix".into());
-
-    let status = Command::new("pkexec")
-        .arg(&current_exe)
+    let current_exe = std::env::current_exe().map_err(|err| err.to_string())?;
+    let mut command = Command::new("/usr/bin/pkexec");
+    if stopping.is_some() {
+        command.arg("--disable-internal-agent");
+    }
+    let mut child = command.arg(current_exe)
         .arg("--add-loopback")
         .arg(nr.to_string())
         .arg(label)
-        .status()
-        .map_err(|e| format!("pkexec: {e}"))?;
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| format!("pkexec: {err}"))?;
 
-    if !status.success() {
-        return Err("criação de dispositivo virtual cancelada pelo usuário ou falhou".into());
+    while stopping.is_some() && child.try_wait().map_err(|err| format!("pkexec: {err}"))?.is_none() {
+        if cancelled() {
+            let _ = child.kill();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    let output = child.wait_with_output().map_err(|err| format!("pkexec: {err}"))?;
+    if cancelled() {
+        return Err(tr("Administrator authentication was cancelled. Enable the webcam again to retry."));
     }
 
-    let dev_nr = if nr >= 0 { nr as u32 } else { 9 };
+    match output.status.code() {
+        Some(126) => return Err(tr("Administrator authentication was cancelled. Enable the webcam again to retry.")),
+        Some(127) => {
+            let error = String::from_utf8_lossy(&output.stderr);
+            if !error.trim().is_empty() {
+                crate::core::log::log("WARN", error.trim());
+            }
+            return Err(tr("Administrator authentication failed. Check your administrator account and try again."));
+        }
+        Some(0) => {}
+        _ => {
+            let error = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            let missing = "Install v4l2loopback for your running kernel, then enable the webcam again.";
+            if error == missing {
+                return Err(tr(missing));
+            }
+            if let Some(detail) = error.strip_prefix("Could not load v4l2loopback. Check the kernel module, then try again. ") {
+                return Err(trf("Could not load v4l2loopback. Check the kernel module, then try again. {error}",
+                    &[("error", detail.into())]));
+            }
+            return Err(trf("Could not set up the virtual webcam: {error}", &[("error", error)]));
+        }
+    }
+
+    let dev_nr = String::from_utf8_lossy(&output.stdout).trim().parse()
+        .map_err(|_| tr("The webcam setup returned an invalid device number."))?;
     wait_for_device(dev_nr);
     Ok(dev_nr)
 }
@@ -385,26 +446,31 @@ pub fn create_or_find_free_loopback(
     LoopbackWriter::open(created_nr)
 }
 
+pub(super) fn open_requested_loopback(n: u32, label: &str) -> Result<LoopbackWriter, String> {
+    let path = format!("/dev/video{n}");
+    if !std::path::Path::new(&path).exists() {
+        add_loopback_ioctl(n as i32, label).map_err(|error| {
+            format!("{path} indisponível: {error}. Prepare o v4l2loopback antes de iniciar. Consulte lenvix --status.")
+        })?;
+        wait_for_device(n);
+    }
+    let writer = LoopbackWriter::open(n)?;
+    if !is_loopback(&writer.file) {
+        return Err(format!("{path} não é um dispositivo v4l2loopback."));
+    }
+    Ok(writer)
+}
+
 /// Tenta abrir um device loopback disponível:
 /// 1. Tenta o device especificado `n` (/dev/videoN).
-/// 2. Se não existir, tenta criá-lo.
-/// 3. Se falhar ou estiver ocupado, cria ou encontra um novo desocupado.
+/// 2. Reutiliza outro loopback livre ou cria um novo dispositivo.
 pub fn ensure_loopback(n: u32, label: &str) -> Result<LoopbackWriter, String> {
-    // 1. Tenta o preferencial
-    if let Ok(w) = LoopbackWriter::open(n) {
-        return Ok(w);
-    }
-
-    // 2. Se não existe /dev/videoN, tenta criá-lo
-    let path = format!("/dev/video{n}");
-    if !std::path::Path::new(&path).exists()
-        && let Ok(created_n) = create_loopback_device(Some(n), label)
-        && let Ok(w) = LoopbackWriter::open(created_n)
+    if let Ok(w) = LoopbackWriter::open(n)
+        && is_loopback(&w.file)
     {
         return Ok(w);
     }
 
-    // 3. Tenta qualquer loopback já existente que não esteja ocupado
     let available = list_loopback_devices_detailed();
     for dev in &available {
         if dev.nr != n && !dev.in_use
@@ -418,29 +484,19 @@ pub fn ensure_loopback(n: u32, label: &str) -> Result<LoopbackWriter, String> {
         }
     }
 
-    // 4. Cria um novo desocupado
-    create_or_find_free_loopback(&std::collections::HashSet::new(), label)
-}
-
-/// Carrega o módulo v4l2loopback pela primeira vez (NUNCA usa -r para não colidir com o kernel em uso)
-fn load_module(n: u32, label: &str) -> Result<(), String> {
-    let status = Command::new("pkexec")
-        .args(["modprobe", "v4l2loopback"])
-        .arg("devices=1")
-        .arg("exclusive_caps=1")
-        .arg("max_openers=30")
-        .arg(format!("video_nr={n}"))
-        .arg(format!("card_label={label:?}"))
-        .status()
-        .map_err(|e| format!("pkexec modprobe: {e}"))?;
-    if !status.success() {
-        return Err("usuário cancelou pkexec ou modprobe falhou".into());
+    if !std::path::Path::new(&format!("/dev/video{n}")).exists() {
+        return LoopbackWriter::open(create_loopback_device(Some(n), label)?);
     }
-    // Assegura permissão
-    let _ = Command::new("pkexec")
-        .args(["chmod", "0666", "/dev/v4l2loopback"])
-        .status();
-    Ok(())
+
+    create_or_find_free_loopback(&std::collections::HashSet::new(), label).map_err(|error| {
+        if available.iter().any(|device| device.nr == n && device.in_use) {
+            let hint = trf("{device} is busy. Close the app using it or select another virtual device.",
+                &[("device", format!("/dev/video{n}"))]);
+            format!("{hint} {error}")
+        } else {
+            error
+        }
+    })
 }
 
 fn assert_ioctl_valid(file: &File, path: &str) -> Result<(), String> {

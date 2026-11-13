@@ -1082,7 +1082,7 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "lenvix"
-version = "0.6.0"
+version = "1.0.1"
 dependencies = [
  "crossbeam-channel",
  "gettext",
@@ -1090,6 +1090,8 @@ dependencies = [
  "gtk4",
  "image",
  "ksni",
+ "libc",
+ "libloading",
  "rayon",
  "tract-onnx",
  "zune-jpeg",

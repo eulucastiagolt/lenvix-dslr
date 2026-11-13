@@ -1,10 +1,10 @@
 {
   "name": "lenvix",
-  "version": "0.6.0",
+  "version": "1.0.1",
   "description": "DSLR & mirrorless live preview, controls and virtual webcam for Linux",
   "scripts": {
     "dev": "cargo run --release",
-    "build": "cargo build --release",
+    "build": "./build.sh --binary-only",
     "dist": "./build.sh",
     "pack": "./build.sh",
     "lint": "cargo clippy --all-targets",

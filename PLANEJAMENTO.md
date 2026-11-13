@@ -296,9 +296,9 @@ segundo plano (daemon + tray) mesmo com a janela fechada.
 - Ligação manual em Rust à libgphoto2: abrir a câmera do usuário, trocar uma config,
   capturar 1 preview. Valida premissas básicas: crate gphoto2, ciclo init/preview/config.
 
-**Fase 1 — CLI-fiel do webcamize (1–2 semanas)**
+**Fase 1 — Transmissão Linux sem interface**
 - Stream engine + módulo kmod + loopback + YUYV + rate-limit + saída limpa.
-  Binário headless `lenvix --device 9 --fps 30` observável por apps de webcam (OBS etc.).
+  O comando `lenvix --device 9 --fps 30` usa um loopback preparado no Linux, conecta a primeira câmera USB e encerra com Ctrl+C. A validação com câmera física e OBS segue pendente.
 
 **Fase 2 — GUI mínima (2–3 semanas)**
 - Janela com preview renderizado do mesmo decode do core-stream; escolha de câmera;
@@ -327,7 +327,7 @@ segundo plano (daemon + tray) mesmo com a janela fechada.
   - Opção configurável e persistente nas configurações (`auto_suspend_preview`).
 - **Empacotamento com suporte a auto-update (Zsync)**: AppImage com `.upd_info` embutido e geração automática de `.zsync` para AppImageUpdate/AppManager.
 
-**Fase 6 — Suporte Multiplataforma: Windows (Última Fase)**
+**Fase 6 — Suporte Multiplataforma: Windows (adiada)**
 - Abstração do backend de webcam virtual: DirectShow Filter / Media Foundation Virtual Camera (driver OBS VirtualCam ou AkVirtualCamera) via `#[cfg(target_os = "windows")]`.
 - Abstração de System Tray: migração de `ksni` (D-Bus/Linux) para abstração agnóstica (`tray-icon` Win32).
 - Backend de câmera: suporte a WinUSB/libusb ou Canon EDSDK.

@@ -74,7 +74,7 @@ sudo dnf install @development-tools cargo git gtk4-devel libgphoto2-devel v4l2lo
 
 ### Loading `v4l2loopback`
 
-Lenvix manages devices dynamically, but you can load the kernel module initially with:
+Lenvix manages devices dynamically. When administrator permission is needed, it opens an authentication dialog in the app using the host Polkit service and its agent library. You can also preload the kernel module:
 
 ```bash
 sudo modprobe v4l2loopback devices=1 exclusive_caps=1 max_openers=30 video_nr=9 card_label="Lenvix Virtual Camera"
@@ -90,6 +90,16 @@ options v4l2loopback devices=1 exclusive_caps=1 max_openers=30 video_nr=9 card_l
 ```
 
 ---
+
+## Streaming without the desktop interface
+
+Prepare a `v4l2loopback` device as shown above, then run:
+
+```bash
+lenvix --device 9 --fps 30
+```
+
+The stream uses `/dev/video9` and picks up the first supported USB camera. It shows the standby image while waiting for a camera. Press Ctrl+C to stop. Command-line settings apply to this run. Use `lenvix --status` to check whether the module and device are available.
 
 ## Building from Source
 

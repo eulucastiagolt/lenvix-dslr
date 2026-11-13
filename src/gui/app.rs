@@ -12,7 +12,12 @@ use crossbeam_channel::{Receiver, Sender};
 use gtk4::prelude::*;
 #[allow(deprecated)]
 use gtk4::{gdk, glib, Align, ButtonsType, MessageDialog};
-use std::{cell::RefCell, rc::Rc, time::Duration};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, atomic::{AtomicBool, Ordering}},
+    time::Duration,
+};
 
 pub const APP_ID: &str = "br.lenvix";
 
@@ -91,11 +96,12 @@ struct Widgets {
     window: gtk4::ApplicationWindow,
 }
 
-pub fn activate(
-    app: &gtk4::Application,
-    engine: Rc<RefCell<CameraEngine>>,
-    action_rx: Receiver<UiAction>,
-) {
+pub fn activate(app: &gtk4::Application) {
+    if let Some(window) = app.active_window() {
+        window.present();
+        return;
+    }
+
     let window = gtk4::ApplicationWindow::builder()
         .application(app)
         .title("Lenvix")
@@ -246,7 +252,8 @@ pub fn activate(
     let lbl_webctr = gtk4::Label::builder()
         .label(tr("webcam: starting…"))
         .halign(Align::Start)
-        .ellipsize(gtk4::pango::EllipsizeMode::End)
+        .wrap(true)
+        .wrap_mode(gtk4::pango::WrapMode::WordChar)
         .max_width_chars(32)
         .xalign(0.0)
         .build();
@@ -297,6 +304,30 @@ pub fn activate(
         .default_height(620)
         .resizable(true)
         .build();
+
+    let webcam_status = lbl_webctr.downgrade();
+    let agent = super::auth::Agent::register(&window, &settings_win, move |waiting| {
+        if let Some(status) = webcam_status.upgrade() {
+            status.set_text(&tr(if waiting {
+                "webcam: waiting for authorization"
+            } else {
+                "webcam: finishing setup…"
+            }));
+        }
+    });
+    let engine = Rc::new(RefCell::new(CameraEngine::spawn_with_authentication(
+        super::auth::report_registration(&agent),
+    )));
+    let agent = RefCell::new(agent.ok());
+    let (action_tx, action_rx) = crossbeam_channel::unbounded();
+    let tray_webcam = crate::tray::LenvixTray::spawn(action_tx, settings::load().webcam);
+
+    let engine_shutdown = engine.clone();
+    app.connect_shutdown(move |_| {
+        engine_shutdown.borrow().stop_authentication();
+        agent.borrow_mut().take();
+        engine_shutdown.borrow_mut().shutdown();
+    });
 
     let set_box = gtk4::Box::builder()
         .orientation(gtk4::Orientation::Vertical)
@@ -809,8 +840,15 @@ pub fn activate(
 
     // FR-22: toggle webcam
     let cmd_tx = engine.borrow().cmd_tx.clone();
+    let suppress_webcam = suppress.clone();
+    let webcam_status = lbl_webctr.clone();
     sw_webcam.connect_state_set(move |_sw, state| {
-        let _ = cmd_tx.send(EngineCmd::SetWebcam(state));
+        if !suppress_webcam.get() {
+            if cmd_tx.send(EngineCmd::SetWebcam(state)).is_ok() && state {
+                webcam_status.set_text(&tr("webcam: preparing…"));
+            }
+            return glib::Propagation::Stop;
+        }
         glib::Propagation::Proceed
     });
 
@@ -1564,7 +1602,6 @@ pub fn activate(
 
     // Fechar a janela: minimiza para a bandeja se keep_in_background == true, ou sai do app se false
     let keep_in_bg_close = keep_in_background_state.clone();
-    let engine_close = engine.clone();
     let app_close = app.clone();
     let window_close = window.clone();
     window.connect_close_request(move |_| {
@@ -1572,7 +1609,6 @@ pub fn activate(
             window_close.set_visible(false);
             glib::Propagation::Stop
         } else {
-            engine_close.borrow_mut().shutdown();
             app_close.quit();
             glib::Propagation::Proceed
         }
@@ -1588,7 +1624,7 @@ pub fn activate(
     refresh_gallery(&w);
 
     // loop de eventos (única fonte de verdade: core-camera + tray)
-    poll_events(app, &window, engine, action_rx, w, cam_on, live_on, is_recording, cameras_data, suppress, visible_state, last_tree, auto_suspend_enabled);
+    poll_events(app, &window, engine, action_rx, tray_webcam, w, cam_on, live_on, is_recording, cameras_data, suppress, visible_state, last_tree, auto_suspend_enabled);
 }
 
 // ------------ painel dinâmico de configurações -------------------------------
@@ -2153,6 +2189,7 @@ fn poll_events(
     window: &gtk4::ApplicationWindow,
     engine: Rc<RefCell<CameraEngine>>,
     action_rx: Receiver<UiAction>,
+    tray_webcam: Arc<AtomicBool>,
     w: Widgets,
     cam_on: Rc<std::cell::Cell<bool>>,
     live_on: Rc<std::cell::Cell<bool>>,
@@ -2182,11 +2219,11 @@ fn poll_events(
             match act {
                 UiAction::ShowWindow => window.set_visible(true),
                 UiAction::SetWebcam(on) => {
-                    let _ = engine.borrow().cmd_tx.send(EngineCmd::SetWebcam(on));
-                    w.sw_webcam.set_active(on);
+                    if engine.borrow().cmd_tx.send(EngineCmd::SetWebcam(on)).is_ok() && on {
+                        w.lbl_webctr.set_text(&tr("webcam: preparing…"));
+                    }
                 }
                 UiAction::Quit => {
-                    engine.borrow_mut().shutdown();
                     app.quit();
                     return glib::ControlFlow::Break;
                 }
@@ -2341,6 +2378,7 @@ fn poll_events(
                     };
                     w.spinner.set_value(f64::from(fps));
                     w.sw_webcam.set_active(webcam);
+                    w.sw_webcam.set_state(webcam);
                     w.sw_mirror.set_active(mirror);
                     w.sw_autostart.set_active(autoconnect);
                     w.zoom_scale.set_value(f64::from(zoom));
@@ -2427,14 +2465,23 @@ fn poll_events(
                     w.lbl_status.set_markup(&format!("<b>preview: {e}</b>"));
                 }
                 EngineEv::WebcamStatus { on, path, card, error } => {
+                    tray_webcam.store(on, Ordering::Relaxed);
+                    suppress.set(true);
                     w.sw_webcam.set_active(on);
+                    w.sw_webcam.set_state(on);
+                    suppress.set(false);
                     match (&path, &error) {
                         (Some(_), None) => {
                             let nome = card.clone().unwrap_or_else(|| tr("active"));
                             w.lbl_webctr.set_text(&trf("webcam: {name}", &[("name", nome.clone())]));
                             w.lbl_status.set_text(&trf("webcam active — {name}", &[("name", nome)]));
                         }
-                        (_, Some(e)) => w.lbl_status.set_markup(&format!("<b>{e}</b>")),
+                        (_, Some(e)) => {
+                            w.lbl_webctr.set_text(&trf(
+                                if on { "webcam active — {detail}" } else { "webcam off — {detail}" },
+                                &[("detail", e.clone())],
+                            ));
+                        }
                         (None, None) => {
                             w.lbl_webctr.set_text(&tr("webcam: off"));
                             w.lbl_status.set_text(&tr("camera connected"));

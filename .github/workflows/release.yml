@@ -26,7 +26,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build Rust binary (release)
-        run: cargo build --release
+        run: ./build.sh --binary-only
 
       - name: Build Debian (.deb) package
         run: ./packaging/deb/build-deb.sh

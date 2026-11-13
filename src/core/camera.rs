@@ -16,6 +16,7 @@ use crossbeam_channel::{bounded, Receiver, Sender};
 use gphoto2::{list::CameraDescriptor, widget::Widget, Camera, Context};
 use std::{
     path::PathBuf,
+    sync::{Arc, atomic::{AtomicBool, Ordering}},
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -153,30 +154,53 @@ pub struct CameraEngine {
     pub cmd_tx: Sender<EngineCmd>,
     pub ev_rx: Receiver<EngineEv>,
     handle: Option<JoinHandle<()>>,
+    stopping: Arc<AtomicBool>,
 }
 
 impl CameraEngine {
     /// Spawna a thread da câmera. Erros de setup chegam como `EngineEv::Fatal`.
     pub fn spawn() -> Self {
+        Self::spawn_inner(None, None)
+    }
+
+    pub(crate) fn spawn_with_authentication(result: Result<(), String>) -> Self {
+        Self::spawn_inner(Some(result), None)
+    }
+
+    pub fn spawn_headless(device: u32, fps: u32) -> Self {
+        Self::spawn_inner(None, Some((device, fps)))
+    }
+
+    fn spawn_inner(authentication: Option<Result<(), String>>, headless: Option<(u32, u32)>) -> Self {
+        let stopping = Arc::new(AtomicBool::new(false));
+        let worker_stopping = Arc::clone(&stopping);
         let (ev_tx, ev_rx) = bounded::<EngineEv>(8);
         let (cmd_tx, cmd_rx) = bounded::<EngineCmd>(16);
 
         let handle = thread::Builder::new()
             .name("core-camera".into())
             .spawn(move || {
-                if let Err(e) = run(&ev_tx, &cmd_rx) {
+                if let Some(result) = authentication {
+                    stream::set_authorization(result, worker_stopping);
+                }
+                if let Err(e) = run(&ev_tx, &cmd_rx, headless) {
                     crate::core::log::log("ERROR", &format!("FATAL: {e}"));
                     let _ = ev_tx.send_timeout(EngineEv::Fatal(e), Duration::from_secs(2));
                 }
             })
             .expect("spawn core-camera");
 
-        Self { cmd_tx, ev_rx, handle: Some(handle) }
+        Self { cmd_tx, ev_rx, handle: Some(handle), stopping }
+    }
+
+    pub(crate) fn stop_authentication(&self) {
+        self.stopping.store(true, Ordering::Release);
     }
 
     pub fn shutdown(&mut self) {
-        let _ = self.cmd_tx.send(EngineCmd::Quit);
+        self.stop_authentication();
         if let Some(h) = self.handle.take() {
+            let _ = self.cmd_tx.send(EngineCmd::Quit);
             let _ = h.join();
         }
     }
@@ -218,6 +242,7 @@ fn resolve_out(
     want: (u32, u32),
     last_fmt_warn: &mut Option<(u32, u32)>,
     ev_tx: &Sender<EngineEv>,
+    fixed_device: bool,
 ) -> (u32, u32) {
     let want = (want.0 & !1, want.1 & !1);
     let Some(wr) = writer.as_mut() else { return want };
@@ -237,6 +262,22 @@ fn resolve_out(
         }
         Err(fmt_err) => {
             let old_nr = wr.device_nr();
+            if last_fmt_warn.as_ref() == Some(&want) {
+                let (w, h) = wr.dims();
+                return if w > 0 && h > 0 { (w, h) } else { want };
+            }
+            if fixed_device {
+                send(ev_tx, EngineEv::WebcamStatus {
+                    on: true,
+                    path: Some(wr.path().into()),
+                    card: Some(wr.card_name()),
+                    error: Some(format!("/dev/video{old_nr}: {fmt_err}")),
+                });
+                *last_fmt_warn = Some(want);
+                let (w, h) = wr.dims();
+                return if w > 0 && h > 0 { (w, h) } else { want };
+            }
+
             let card_label = wr.card_name();
             conflicted.insert(old_nr);
             crate::core::log::log(
@@ -293,7 +334,7 @@ fn resolve_out(
             let eff = if dw > 0 && dh > 0 { (dw, dh) } else { want };
             if last_fmt_warn.as_ref() != Some(&want) {
                 let msg = format!(
-                    "webcam em {}×{} (/dev/video{old_nr} ocupado por outro app — use o '+' para gerar nova saída)",
+                    "webcam em {}×{} (/dev/video{old_nr} ocupado — feche o aplicativo que usa a saída ou selecione outra)",
                     eff.0, eff.1
                 );
                 send(ev_tx, EngineEv::WebcamStatus {
@@ -411,12 +452,18 @@ fn open_desc(context: &Context, model: &str, port: &str) -> Result<Camera, Strin
 // ===============================================================================
 
 #[allow(clippy::too_many_lines)]
-fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), String> {
+fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>, headless: Option<(u32, u32)>) -> Result<(), String> {
     crate::core::log::log("INFO", "engine iniciada (standby — câmera sob demanda)");
     let context = Context::new().map_err(|e| format!("Context::new: {e}"))?;
 
     // estado persistido (settings.conf): aplica antes de qualquer conexão
-    let saved = settings::load();
+    let mut saved = settings::load();
+    if let Some((device, fps)) = headless {
+        saved.webcam = true;
+        saved.autoconnect = true;
+        saved.video_device = device;
+        saved.fps = fps.max(1);
+    }
     let mut target_fps = saved.fps;
     let mut webcam_on = saved.webcam;
     let mut mirror = saved.mirror;
@@ -439,7 +486,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
     let mut frame_times: Vec<Instant> = Vec::with_capacity(64);
     let mut last_fmt_warn: Option<(u32, u32)> = None; // debounce do aviso de troca
     let mut standby: Option<StandbyCache> = None;
-    let mut scanning_active = false;
+    let mut scanning_active = headless.is_some();
     let mut last_hotplug = Instant::now();
     let mut hotplug_every = HOTPLUG_MIN;
     let mut cam_errs: u32 = 0;
@@ -452,7 +499,12 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
 
     // Inicializa a webcam virtual se estiver ligada por padrão
     if webcam_on {
-        match stream::ensure_loopback(video_device, "Lenvix") {
+        let output = if headless.is_some() {
+            stream::open_requested_loopback(video_device, "Lenvix")
+        } else {
+            stream::ensure_loopback(video_device, "Lenvix")
+        };
+        match output {
             Ok(w) => {
                 let card = w.card_name();
                 crate::core::log::log(
@@ -468,6 +520,10 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                 writer = Some(w);
             }
             Err(e) => {
+                if headless.is_some() {
+                    return Err(e);
+                }
+                webcam_on = false;
                 crate::core::log::log("WARN", &format!("webcam inicial não disponível: {e}"));
                 send(ev_tx, EngineEv::WebcamStatus {
                     on: false,
@@ -484,7 +540,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
     let mut auto_suspend_preview = saved.auto_suspend_preview;
     let mut use_gpu = saved.use_gpu;
     let mut keep_in_background = saved.keep_in_background;
-    let mut gui_preview_active = true;
+    let mut gui_preview_active = headless.is_none();
     let mut yuyv_buf: Vec<u8> = Vec::new();
 
     let mut vb_config = crate::core::segmentation::VirtualBackgroundConfig {
@@ -556,18 +612,24 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
 
     let mut last_save = Instant::now();
     let mut save_st = |force: bool, s: &settings::Settings| {
-        if force || last_save.elapsed() >= Duration::from_millis(300) {
+        if headless.is_none() && (force || last_save.elapsed() >= Duration::from_millis(300)) {
             settings::save(s);
             last_save = Instant::now();
         }
     };
 
+    let mut pending_cmd = None;
     loop {
         // —— comandos (GUI/tray) ————————————————————————————————————————
-        while let Ok(cmd) = cmd_rx.try_recv() {
+        while let Some(cmd) = pending_cmd.take().or_else(|| cmd_rx.try_recv().ok()) {
             match cmd {
                 EngineCmd::Quit => {
-                    settings::save(&current_settings!());
+                    if headless.is_none() {
+                        settings::save(&current_settings!());
+                    }
+                    if let Some(ref camera) = cam {
+                        set_camera_viewfinder(camera, false);
+                    }
                     crate::core::log::log("INFO", "engine encerrada");
                     drop(writer.take()); // fecha fd e (limpeza FR-22)
                     drop(cam.take()); // libera o USB para outros apps
@@ -607,6 +669,8 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                                     writer = Some(w);
                                 }
                                 Err(e) => {
+                                    webcam_on = false;
+                                    save_st(true, &current_settings!());
                                     crate::core::log::log("ERROR", &format!("ligar webcam falhou: {e}"));
                                     send(ev_tx, EngineEv::WebcamStatus {
                                         on: false,
@@ -676,10 +740,22 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                             }
                             save_st(true, &current_settings!());
                             send_devices_list(ev_tx, video_device, &conflicted_devices);
+                            send(ev_tx, EngineEv::WebcamStatus {
+                                on: writer.is_some(),
+                                path: writer.as_ref().map(|w| w.path().into()),
+                                card: writer.as_ref().map(|w| w.card_name()),
+                                error: None,
+                            });
                             crate::core::log::log("INFO", &format!("nova saída /dev/video{new_n} criada e selecionada"));
                         }
                         Err(e) => {
                             crate::core::log::log("ERROR", &format!("criar nova saída falhou: {e}"));
+                            send(ev_tx, EngineEv::WebcamStatus {
+                                on: writer.is_some(),
+                                path: writer.as_ref().map(|w| w.path().into()),
+                                card: writer.as_ref().map(|w| w.card_name()),
+                                error: Some(e),
+                            });
                         }
                     }
                 }
@@ -1072,8 +1148,11 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                                     cam = Some(c);
                                     conn = Some((model, port));
                                     cam_errs = 0;
-                                    liveview_on = false;
-                                    send(ev_tx, EngineEv::LiveViewStatus(false));
+                                    liveview_on = headless.is_some();
+                                    if liveview_on {
+                                        set_camera_viewfinder(cam.as_ref().unwrap(), true);
+                                    }
+                                    send(ev_tx, EngineEv::LiveViewStatus(liveview_on));
                                     push_tree(cam.as_ref().unwrap(), ev_tx);
                                     continue;
                                 }
@@ -1102,6 +1181,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                     want,
                     &mut last_fmt_warn,
                     ev_tx,
+                    headless.is_some(),
                 )
             } else {
                 want
@@ -1157,7 +1237,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
             }
 
             if !gui_preview_active && writer.is_none() {
-                let _ = cmd_rx.recv_timeout(Duration::from_millis(150));
+                pending_cmd = cmd_rx.recv_timeout(Duration::from_millis(150)).ok();
                 continue;
             }
 
@@ -1174,7 +1254,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
         // suspende a captura de preview da câmera: poupa bateria, calor e 100% de CPU.
         let stream_needed = writer.is_some() || recorder.is_some();
         if !gui_preview_active && !stream_needed {
-            let _ = cmd_rx.recv_timeout(Duration::from_millis(150));
+            pending_cmd = cmd_rx.recv_timeout(Duration::from_millis(150)).ok();
             continue;
         }
 
@@ -1273,6 +1353,7 @@ fn run(ev_tx: &Sender<EngineEv>, cmd_rx: &Receiver<EngineCmd>) -> Result<(), Str
                         (w, h),
                         &mut last_fmt_warn,
                         ev_tx,
+                        headless.is_some(),
                     );
                     if let Some(wr) = writer.as_mut() {
                         if eff == (w, h) {

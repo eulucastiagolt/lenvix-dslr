@@ -4,7 +4,7 @@ all: build
 
 # Compilar binário release
 build:
-	cargo build --release
+	./build.sh --binary-only
 
 # Rodar em modo release
 dev:

@@ -405,3 +405,69 @@ msgid "When closing the window, keeps the app running in the system tray."
 msgstr ""
 
 
+
+msgid "Authorize the virtual webcam"
+msgstr ""
+
+msgid "Lenvix needs administrator permission to set up the virtual webcam."
+msgstr ""
+
+msgid "Administrator account"
+msgstr ""
+
+msgid "Authenticate"
+msgstr ""
+
+msgid "Waiting for the system…"
+msgstr ""
+
+msgid "Could not open the administrator prompt: {error}"
+msgstr ""
+
+msgid "Administrator permission is required."
+msgstr ""
+
+msgid "Could not load the v4l2loopback kernel module."
+msgstr ""
+
+msgid "Administrator authentication was cancelled."
+msgstr ""
+
+msgid "Administrator authentication failed."
+msgstr ""
+
+msgid "Could not set up the virtual webcam: {error}"
+msgstr ""
+
+msgid "The webcam setup returned an invalid device number."
+msgstr ""
+
+msgid "webcam: waiting for authorization"
+msgstr ""
+
+msgid "webcam: finishing setup…"
+msgstr ""
+
+msgid "webcam: preparing…"
+msgstr ""
+
+msgid "webcam active — {detail}"
+msgstr ""
+
+msgid "webcam off — {detail}"
+msgstr ""
+
+msgid "Install v4l2loopback for your running kernel, then enable the webcam again."
+msgstr ""
+
+msgid "Could not load v4l2loopback. Check the kernel module, then try again. {error}"
+msgstr ""
+
+msgid "Administrator authentication was cancelled. Enable the webcam again to retry."
+msgstr ""
+
+msgid "Administrator authentication failed. Check your administrator account and try again."
+msgstr ""
+
+msgid "{device} is busy. Close the app using it or select another virtual device."
+msgstr ""

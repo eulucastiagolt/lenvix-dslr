@@ -4,6 +4,11 @@ set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
+case "$#:${1-}" in
+    0:|1:--binary-only) ;;
+    *) echo "Uso: $0 [--binary-only]" >&2; exit 2 ;;
+esac
+
 # Versão sempre vem do Cargo.toml — nunca hardcode (evita pacotes defasados)
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
 [ -n "$VERSION" ] || { echo "ERRO: versão não encontrada no Cargo.toml"; exit 1; }
@@ -15,6 +20,10 @@ mkdir -p "$ROOT/dist"
 
 echo "==> 1. Compilando binário de release..."
 cargo build --release
+
+if [ "${1-}" = "--binary-only" ]; then
+    exit 0
+fi
 
 echo "==> 2. Gerando pacote Debian (.deb)..."
 ./packaging/deb/build-deb.sh

@@ -27,6 +27,16 @@
     <binary>lenvix</binary>
   </provides>
   <releases>
+    <release version="1.0.1" date="2026-11-13">
+      <description>
+        <p>Corrige a abertura do diálogo de autenticação da webcam em sistemas que identificam a solicitação pelo PID.</p>
+      </description>
+    </release>
+    <release version="1.0.0" date="2026-11-13">
+      <description>
+        <p>Autenticação da webcam virtual na interface do Lenvix, com mensagens sobre o andamento e ações para recuperar a saída. Transmissão sem interface disponível no Linux.</p>
+      </description>
+    </release>
     <release version="0.6.0" date="2026-11-02">
       <description>
         <p>Aceleração por hardware na GPU (GPU acceleration com VA-API e NVENC para renderização de texturas e codificação de vídeo com consumo mínimo de CPU), controle de execução em segundo plano nas preferências (escolha entre manter na bandeja ou fechar o aplicativo), e correções de marcação Pango.</p>

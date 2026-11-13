@@ -1,7 +1,7 @@
 //! Tray: StatusNotifierItem via ksni (bloqueante/threads próprios).
 //! Menu fiel FR-27: abrir/fechar janela, webcam on/off, sair (com limpeza).
 
-use crate::core::{camera::EngineCmd, i18n};
+use crate::core::i18n;
 use crate::gui::UiAction;
 use crossbeam_channel::Sender;
 use ksni::{
@@ -12,17 +12,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 pub struct LenvixTray {
-    pub cmd_tx: Sender<EngineCmd>,
     pub action_tx: Sender<UiAction>,
     webcam_on: Arc<AtomicBool>,
 }
 
 impl LenvixTray {
-    pub fn spawn(cmd_tx: Sender<EngineCmd>, action_tx: Sender<UiAction>, initial_webcam_on: bool) {
+    pub fn spawn(action_tx: Sender<UiAction>, initial_webcam_on: bool) -> Arc<AtomicBool> {
+        let webcam_on = Arc::new(AtomicBool::new(initial_webcam_on));
         let tray = Self {
-            cmd_tx,
             action_tx,
-            webcam_on: Arc::new(AtomicBool::new(initial_webcam_on)),
+            webcam_on: Arc::clone(&webcam_on),
         };
         std::thread::Builder::new()
             .name("tray".into())
@@ -33,6 +32,7 @@ impl LenvixTray {
                 }
             })
             .expect("spawn tray");
+        webcam_on
     }
 }
 
@@ -86,8 +86,6 @@ impl Tray for LenvixTray {
                 checked: webcam_on,
                 activate: Box::new(move |tray| {
                     let prev = web_state.load(Ordering::Relaxed);
-                    web_state.store(!prev, Ordering::Relaxed);
-                    let _ = tray.cmd_tx.send(EngineCmd::SetWebcam(!prev));
                     let _ = tray.action_tx.send(UiAction::SetWebcam(!prev));
                 }),
                 ..CheckmarkItem::default()
