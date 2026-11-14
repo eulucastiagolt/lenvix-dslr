@@ -471,3 +471,6 @@ msgstr ""
 
 msgid "{device} is busy. Close the app using it or select another virtual device."
 msgstr ""
+
+msgid "Could not start privileged webcam setup: {error}"
+msgstr ""

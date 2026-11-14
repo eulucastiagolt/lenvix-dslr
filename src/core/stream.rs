@@ -10,7 +10,7 @@ use std::{
     cell::OnceCell,
     fs::{File, OpenOptions},
     io::Write,
-    os::fd::AsRawFd,
+    os::{fd::AsRawFd, unix::fs::PermissionsExt},
     process::{Command, Stdio},
     sync::{Arc, atomic::{AtomicBool, Ordering}},
 };
@@ -355,11 +355,24 @@ pub fn create_loopback_device(preferred_nr: Option<u32>, label: &str) -> Result<
     }
 
     let current_exe = std::env::current_exe().map_err(|err| err.to_string())?;
+    let staged = if std::env::var_os("APPIMAGE").is_some() {
+        let dir = tempfile::Builder::new()
+            .prefix("lenvix-webcam-")
+            .permissions(std::fs::Permissions::from_mode(0o700))
+            .tempdir_in("/var/tmp")
+            .map_err(|err| format!("AppImage: {err}"))?;
+        std::fs::copy(&current_exe, dir.path().join("lenvix"))
+            .map_err(|err| format!("AppImage: {err}"))?;
+        Some(dir)
+    } else {
+        None
+    };
+    let helper = staged.as_ref().map_or(current_exe, |dir| dir.path().join("lenvix"));
     let mut command = Command::new("/usr/bin/pkexec");
     if stopping.is_some() {
         command.arg("--disable-internal-agent");
     }
-    let mut child = command.arg(current_exe)
+    let mut child = command.arg(helper)
         .arg("--add-loopback")
         .arg(nr.to_string())
         .arg(label)
@@ -385,6 +398,10 @@ pub fn create_loopback_device(preferred_nr: Option<u32>, label: &str) -> Result<
             let error = String::from_utf8_lossy(&output.stderr);
             if !error.trim().is_empty() {
                 crate::core::log::log("WARN", error.trim());
+            }
+            if error.contains("Error accessing ") || error.contains("Error executing ") && error.contains("Permission denied") {
+                return Err(trf("Could not start privileged webcam setup: {error}",
+                    &[("error", error.trim().into())]));
             }
             return Err(tr("Administrator authentication failed. Check your administrator account and try again."));
         }

@@ -468,3 +468,6 @@ msgstr "A autenticação falhou. Verifique a conta de administrador e tente nova
 
 msgid "{device} is busy. Close the app using it or select another virtual device."
 msgstr "{device} está ocupado. Feche o aplicativo que está usando o dispositivo ou selecione outra saída virtual."
+
+msgid "Could not start privileged webcam setup: {error}"
+msgstr "Não foi possível iniciar a configuração da webcam com permissão de administrador: {error}"

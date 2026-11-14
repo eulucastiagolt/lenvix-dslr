@@ -27,6 +27,11 @@
     <binary>lenvix</binary>
   </provides>
   <releases>
+    <release version="1.0.2" date="2026-11-14">
+      <description>
+        <p>Corrige a autenticação para preparar a webcam virtual ao iniciar pelo AppImage.</p>
+      </description>
+    </release>
     <release version="1.0.1" date="2026-11-13">
       <description>
         <p>Corrige a abertura do diálogo de autenticação da webcam em sistemas que identificam a solicitação pelo PID.</p>

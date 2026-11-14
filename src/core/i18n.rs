@@ -91,7 +91,7 @@ pub fn init(language_setting: Option<&str>) {
     let mut loaded: Option<(gettext::Catalog, String)> = None;
     'outer: for cand in &cands {
         for root in search_roots() {
-            let path = root.join(format!("{cand}.po"));
+            let path = root.join(format!("{cand}.mo"));
             if path.is_file() {
                 match std::fs::File::open(&path)
                     .map_err(|e| e.to_string())
